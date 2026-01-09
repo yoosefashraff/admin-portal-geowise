@@ -2,6 +2,7 @@ import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { MonthGroup } from "./types/scheduler.types";
 import { count } from "console";
+import dayjs from "dayjs";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -351,3 +352,11 @@ export function convertTo12Hour (time24 : string){
     const hours12 = hours % 12 || 12;
     return `${hours12}:${String(minutes).padStart(2, '0')} ${ampm}`;
 };
+
+export function convertAspNetDate(dateString: string) {
+  const match = dateString.match(/\d+/);
+  const timestamp = match ? Number(match[0]) : null;
+  const date = timestamp ? dayjs(timestamp) : null;
+
+  return date?.format('MMM DD, YYYY') || '';
+}

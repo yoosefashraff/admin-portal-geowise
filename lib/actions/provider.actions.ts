@@ -50,3 +50,13 @@ export async function getCompanyProviderServices(data: { CompanyAdminId: number,
     return {Status: 500, Message: errorMessage, Object: []};
   }
 }
+
+export async function deleteProvider(providerId: number) : Promise<{Status: number, Message: string}> {
+  try {
+    const response: {Status: number, Message: string} = await serverAPI.delete(`/Company/DeleteProvider`, {params: {userId: providerId}});
+    return response;
+  } catch (err: any) {
+    const errorMessage = err.response?.statusText || err.message;
+    return {Status: 500, Message: errorMessage};
+  }
+}

@@ -30,3 +30,19 @@ export interface  ProviderLinkedServicesResponse{
   Message: string,
   Object: ProviderLinkedServices[]
 }
+
+export interface AddProviderPayload{
+  FullName: string,
+  UserName: string,
+  Email: string,
+  PhoneNumber: string,
+  CountryCode: string,
+  Password: string,
+  ConfirmPassword: string,
+  CompanyAdminId: number,
+  AssociationType: string,
+  Lat: string,
+  Lng: string,
+  UserType: number,
+  ReCaptchaToken: string,
+}

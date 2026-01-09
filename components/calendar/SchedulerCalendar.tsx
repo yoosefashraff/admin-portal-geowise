@@ -19,15 +19,17 @@ import {
   getDarkerBorderColor,
   getMediumColor,
   TIME_ONLY_OPTIONS,
+  formatDateToYYYYMMDD,
 } from '@/lib/calendarUtils';
 import EventPopup from './EventPopup';
 import DateRangePickerCustom from './DateRangePicker';
 import styles from './SchedulerCalendar.module.css';
-import { fetchBookings, cancelCallout, deleteBlockHour, calendarBooking } from '@/lib/actions/calendar.actions';
+import { fetchBookings, cancelCallout, deleteBlockHour, calendarBooking, exportCalendar } from '@/lib/actions/calendar.actions';
 import { getServiceZoneColorList } from '@/lib/actions/zone.actions';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store/authStore';
 import { set } from 'date-fns';
+import { Button } from '@/components/ui/button';
 
 export default function SchedulerCalendar() {
   const calendarRef = useRef<FullCalendar>(null);
@@ -425,8 +427,124 @@ export default function SchedulerCalendar() {
     calendarApi.changeView(calendarApi.view.type, newStart);
   };
 
+  const handleExportCalendar = async () => {
+    const exportStartDate = dateRange.start;
+    const exportEndDate = dateRange.end;
+
+    // Format dates for the API
+    const startDateStr = formatDateToYYYYMMDD(exportStartDate) + 'T00:00:00';
+    const endDateStr = formatDateToYYYYMMDD(exportEndDate) + 'T23:59:59';
+
+    const formData = {
+      StartDate: startDateStr,
+      EndDate: endDateStr,
+      IsOnlyConfirmed: 'false',
+      CompanyAdminId: user?.UserID,
+      FilterType: ''
+    };
+
+    try {
+      const response = await exportCalendar(formData);
+
+      const exportName = `export-${formatDateToYYYYMMDD(exportStartDate)}-${formatDateToYYYYMMDD(exportEndDate)}.xlsx`;
+      
+      if (typeof response.toBase64 === 'function') {
+        const base64String = response.toBase64();
+
+        const byteCharacters = atob(base64String);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = exportName;
+        document.body.appendChild(link);
+        link.click();
+        
+        setTimeout(() => {
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+        }, 100);
+        
+        toast.success('Exported successfully');
+      } 
+      else if (response.BYTES_PER_ELEMENT) {
+        const blob = new Blob([response], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = exportName;
+        document.body.appendChild(link);
+        link.click();
+        
+        setTimeout(() => {
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+        }, 100);
+        
+        toast.success('Exported successfully');
+      }
+      else {
+        console.error('Unknown response type. Full response:', response);
+        
+        if (typeof response === 'string') {
+          const byteCharacters = atob(response);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          });
+
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = exportName;
+          document.body.appendChild(link);
+          link.click();
+          
+          setTimeout(() => {
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+          }, 100);
+          
+          toast.success('Exported successfully');
+        } else {
+          throw new Error('Cannot handle this response type');
+        }
+      }
+      
+    } catch (error) {
+      toast.error("Unable to export calendar. Please try again.");
+      console.error('Export error:', error);
+    }
+  };
+
   return (
     <div>
+
+      <div className="flex justify-end mb-6 gap-2">
+        {/* <Button className="cursor-pointer">New Booking</Button> */}
+        <Button 
+          className="cursor-pointer"
+          onClick={handleExportCalendar}
+        >
+          Export to Excel
+        </Button>
+      </div>
+
       <div className={styles.header}>
         <DateRangePickerCustom
           startDate={dateRange.start}

@@ -80,8 +80,8 @@ export function DashboardSidebar() {
             {
               label: "Linked users",
               icon: Settings,
-              href: "/settings/linked-users",
-              badge: "10",
+              href: "/linked-users",
+              // badge: "10",
             },
             {
               label: "Services",
