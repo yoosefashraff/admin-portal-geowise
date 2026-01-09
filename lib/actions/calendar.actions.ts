@@ -55,3 +55,19 @@ export async function calendarBooking(data: BookingRequestPayload) : Promise<API
     return {Status: 500, Message: errorMessage};
   }
 }
+
+export async function exportCalendar(data: any) : Promise<any> {
+  try {
+    const response: any = await serverAPI.post('/company/exportcalendar', data, {
+      responseType: 'arraybuffer',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      },
+    });
+    return response;
+  } catch (err: any) {
+    const errorMessage = err.response?.statusText || err.message;
+    return {Status: 500, Message: errorMessage, blob: new Blob()};
+  }
+}
