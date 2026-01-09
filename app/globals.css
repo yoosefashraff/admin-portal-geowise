@@ -1,0 +1,848 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.129 0.042 264.695);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.129 0.042 264.695);
+  --primary: oklch(0.208 0.042 265.755);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.968 0.007 247.896);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent: oklch(0.968 0.007 247.896);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
+  --ring: oklch(0.704 0.04 256.788);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.984 0.003 247.858);
+  --sidebar-foreground: oklch(0.129 0.042 264.695);
+  --sidebar-primary: oklch(0.208 0.042 265.755);
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.968 0.007 247.896);
+  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
+  --sidebar-border: oklch(0.929 0.013 255.508);
+  --sidebar-ring: oklch(0.704 0.04 256.788);
+}
+
+.dark {
+  --background: oklch(0.129 0.042 264.695);
+  --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.208 0.042 265.755);
+  --card-foreground: oklch(0.984 0.003 247.858);
+  --popover: oklch(0.208 0.042 265.755);
+  --popover-foreground: oklch(0.984 0.003 247.858);
+  --primary: oklch(0.929 0.013 255.508);
+  --primary-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.279 0.041 260.031);
+  --secondary-foreground: oklch(0.984 0.003 247.858);
+  --muted: oklch(0.279 0.041 260.031);
+  --muted-foreground: oklch(0.704 0.04 256.788);
+  --accent: oklch(0.279 0.041 260.031);
+  --accent-foreground: oklch(0.984 0.003 247.858);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.551 0.027 264.364);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.208 0.042 265.755);
+  --sidebar-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.279 0.041 260.031);
+  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.551 0.027 264.364);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+body{
+  font-size: 16px;
+}
+
+.PhoneInputInput {
+  border: none !important;
+  outline: none !important;
+  font-size: 15px;
+  width: 100%;
+}
+
+.PhoneInputCountry {
+  padding-right: 6px;
+  border-right: 1px solid #E2E8F0;
+}
+
+.PhoneInputCountrySelect {
+  display: flex;
+  align-items: center;
+}
+.PhoneInputCountryIcon {
+  display: none !important;
+}
+
+.PhoneInputCountry {
+  padding-left: 0 !important;
+}
+
+.datetime-swipper-1.swiper-horizontal .swiper-scrollbar-drag,
+.datetime-swipper-2.swiper-horizontal .swiper-scrollbar-drag{
+  cursor: grab;
+}
+button.gm-ui-hover-effect{
+  width: 30px !important;
+  height: 30px !important;
+}
+.gm-ui-hover-effect>span{
+  margin: 0 !important;
+}
+
+@media(max-width: 1400) and (min-width: 1024px) {
+  html{
+    font-size: 14px;
+  }
+}
+
+/* @import '@fullcalendar/core/main.css';
+@import '@fullcalendar/resource-timeline/main.css'; */
+
+/* Full calender styles */
+  .resource-avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        object-fit: cover;
+        margin-right: 8px;
+        vertical-align: middle;
+    }
+
+    .marker-event-before, .marker-event-after {
+        background: transparent !important;
+        border: none !important;
+        pointer-events: none;
+        position: relative;
+    }
+
+        .marker-event-before::before, .marker-event-after::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 15%;
+            width: 25px;
+            height: 25px;
+            background-image: url('https://cdn-icons-png.flaticon.com/512/25/25694.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            transform: translate(-50%, -50%);
+        }
+
+    .fc-event-time {
+        display: none;
+    }
+
+
+    .fc-resource-cell {
+        display: flex;
+        align-items: center;
+    }
+
+    .fc-daygrid-block-event .fc-event-time, .fc-daygrid-block-event .fc-event-title {
+        padding: 1px;
+        font-size: 9px;
+    }
+
+    .fc-h-event .fc-event-title-container {
+        text-align: center;
+    }
+
+    .fc-event-title.fc-sticky {
+        font-weight: 700;
+    }
+
+    .fc-direction-ltr {
+        max-height: 80vh;
+    }
+
+    .geowise-company .main-content {
+        padding: 0 0 0px !important;
+    }
+
+    @media screen and (max-width: 767px) {
+        .fc .fc-toolbar.fc-header-toolbar {
+            margin-bottom: 1.5em;
+            margin-right: auto;
+            margin-left: auto;
+        }
+
+        .fc .fc-toolbar {
+            align-items: center;
+            display: block;
+            justify-content: space-between;
+        }
+    }
+
+    .fc .fc-timeline-slot-minor {
+        border-style: dotted;
+        border: none !important;
+    }
+
+    .fc-theme-standard td, .fc-theme-standard th {
+        /*border: 1px solid #e3e6ef63 !important;*/
+    }
+
+    .fc-theme-standard td, .fc-theme-standard th {
+        border: 1px solid #c0def62b;
+    }
+
+    .fc .fc-resource-timeline-divider {
+        cursor: col-resize;
+        width: 21px;
+        background: linear-gradient(to right, #d2e6fd29, transparent);
+        border-right: none;
+    }
+
+    .fc .fc-timeline-slot-cushion {
+        white-space: nowrap;
+        font-weight: 400;
+        color: #5A7895;
+        font-size: 12.48px;
+    }
+
+    .fc-button {
+        background-color: white !important;
+        color: black !important;
+        /*border: 2px solid #c6e5fd8f !important;*/
+        font-weight: 600;
+    }
+
+    .fc-button-active {
+        background-color: #f7fafd !important;
+        border: none;
+    }
+
+    .fc-timeline-event .fc-event-main {
+        height: 45px !important;
+    }
+
+    .fc-direction-ltr .fc-timeline-event.fc-event-end, .fc-direction-ltr .fc-timeline-more-link {
+        margin-right: 1px !important;
+        border-radius: 5px !important;
+    }
+
+    a.fc-event.fc-event-draggable {
+        margin-right: 1px !important;
+        border-radius: 5px !important;
+    }
+
+    .fc-h-event {
+        /*border: 2px solid #8bb8e4 !important;*/
+        border-width: 1px;
+    }
+
+    .fc-event-title.fc-sticky {
+        /*color: #3b72a8 !important;*/
+    }
+
+    /* Force center toolbar chunk to use flexbox */
+    .fc-toolbar .fc-toolbar-chunk:nth-child(2) {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 10px !important;
+        flex-wrap: nowrap !important;
+    }
+
+    /* Remove any default margins */
+    .fc-toolbar-title {
+        margin: 0 !important;
+        flex-shrink: 0 !important;
+    }
+
+    /* Ensure buttons stay aligned */
+    .fc-prev-button,
+    .fc-next-button {
+        margin: 0 !important;
+        flex-shrink: 0 !important;
+        position: relative !important;
+        top: 0 !important;
+    }
+
+    /* Nuclear option - reset all possible conflicts */
+    .fc .fc-toolbar.fc-header-toolbar {
+        display: flex;
+        flex-direction: row;
+        margin-top: -33px;
+    }
+
+    .fc-toolbar-chunk:nth-child(2) {
+        display: flex !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+        overflow: visible !important;
+    }
+
+        .fc-toolbar-chunk:nth-child(2) > * {
+            float: none !important;
+            display: inline-flex !important;
+            vertical-align: middle !important;
+        }
+
+    .fc .fc-button-primary:not(:disabled).fc-button-active {
+        border-color: #dde9f5;
+    }
+    /**/
+    .fc .fc-button-primary {
+        border-color: #dde9f5 !important;
+    }
+
+        .fc .fc-button-primary:not(:disabled).fc-button-active:focus, .fc .fc-button-primary:not(:disabled):active:focus {
+            box-shadow: none !important;
+        }
+
+        .fc .fc-button-primary:focus {
+            box-shadow: none !important;
+        }
+
+    .fc .fc-button:focus {
+        box-shadow: none !important;
+    }
+
+    button.fc-myNext-button.fc-button.fc-button-primary {
+        border: none;
+        background-color: #eef7ff00 !important;
+    }
+
+    button.fc-myPrev-button.fc-button.fc-button-primary {
+        border: none;
+        background-color: #eef7ff00 !important;
+        margin-right: 20px;
+    }
+
+
+    .fc .fc-toolbar-title {
+        font-size: 19.2px;
+        color: #304965;
+        margin: 0px;
+        font-weight: 300;
+        line-height: 35px
+    }
+
+    input#customDateInput {
+        padding: 5px;
+        border-radius: 10px;
+        border-width: 1px;
+        border: none;
+        margin-right: 0px;
+        max-width: 110px;
+    }
+
+    input#customDateInput2 {
+        padding: 5px;
+        border-radius: 10px;
+        border-width: 1px;
+        border: none;
+        max-width: 110px;
+        margin-right: 0px;
+    }
+
+    button.fc-myPrev-button.fc-button.fc-button-primary {
+        margin-right: 0px;
+    }
+
+    img.calendar-icon2 {
+        position: relative;
+        top: 4px;
+        display: none;
+    }
+
+    .custom-icon {
+        display: inline-block;
+        width: 24px;
+        height: 24px;
+        background-size: contain;
+        background-repeat: no-repeat;
+    }
+
+    .prev-icon {
+        background-image: url('/Content/images/arrow-left-icon.png');
+    }
+
+    .next-icon {
+        background-image: url('/Content/images/arrow-right-icon.png');
+    }
+
+    .fc-event-main {
+        overflow: hidden;
+    }
+
+    event .fc-event-title {
+        padding: 0px 2px;
+        white-space: nowrap;
+        /*font-weight: 600 !important;*/
+    }
+
+    .fc-event-title {
+        padding: 0px 2px;
+        white-space: nowrap;
+        /*font-weight: 600 !important;*/
+    }
+
+    .fc-duration {
+        font-weight: 600;
+    }
+
+    /*span.fc-datagrid-cell-main {
+        white-space: pre-line !important;
+        line-height: 1.3 !important;
+    }*/
+
+    .fc-datagrid-cell-main {
+        white-space: pre-line;
+        line-height: 1.3;
+        color: #000;
+        font-size: 1em;
+    }
+
+        .fc-datagrid-cell-main::after {
+            content: attr(data-username);
+            display: block;
+            color: #bbb;
+            font-size: 0.85em;
+            margin-top: 2px;
+        }
+
+    img.calendar-icon {
+        position: relative;
+        top: 4px;
+    }
+
+    #customDateInput::-webkit-calendar-picker-indicator {
+        display: none;
+    }
+
+    #customDateInput2::-webkit-calendar-picker-indicator {
+        display: none;
+    }
+
+    /*.fc-toolbar-chunk {
+        margin-left: 40px;
+    }*/
+
+    p#calendarHeading {
+        font-size: 23px;
+        font-weight: 500;
+        margin-left: 30px;
+    }
+
+    .calendar-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .btn-export-calendar {
+        margin-left: auto;
+        padding: 8px 16px;
+        background-color: #304965;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.3s;
+    }
+
+    .btn-export-calendar:hover {
+        background-color: #1e2f3f;
+    }
+
+    @media screen and (max-width: 767px) {
+        .btn-export-calendar {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+    }
+
+    span.fc-datagrid-cell-main {
+        font-weight: 400;
+    }
+
+    .fc-direction-ltr .fc-button-group > .fc-button {
+        border-bottom-right-radius: 0px;
+        border-top-right-radius: 0px;
+        font-weight: 500;
+    }
+
+    .fc-theme-standard .fc-scrollgrid {
+        border: 1px solid #c0def62b;
+    }
+
+    .fc-timeline-event .fc-event-time, .fc-timeline-event .fc-event-title {
+        padding: 0px 2px;
+        white-space: nowrap;
+        font-size: 9.6px;
+        font-weight: 600;
+    }
+
+    .fc-duration {
+        font-weight: 400;
+        font-size: 9.6px;
+        line-height: 1;
+    }
+
+    .fc-timeline-event .fc-event-main {
+        height: 42px !important;
+    }
+
+    .resource-header-title {
+        margin-top: 10px;
+        margin-left: 20px;
+    }
+
+    :root {
+        --fc-now-indicator-color: #8080804d;
+    }
+
+    .fc-direction-ltr .fc-toolbar > * > :not(:first-child) {
+        margin-left: 0px;
+    }
+
+    .calendar-icon2 {
+        cursor: pointer;
+    }
+
+    .dv-content-page {
+        height: 660px;
+    }
+
+    /*.geowise-company .main-content {
+        padding: 0 0 0px !important;
+    }*/
+
+    .fc-event.fc-event-start.fc-event-end.fc-event-past.fc-bg-event {
+        height: 47px;
+        text-align: center;
+        padding-top: 18px;
+    }
+
+    .fc .fc-bg-event {
+        background: var(--fc-bg-event-color);
+        opacity: 1;
+    }
+
+        .fc .fc-bg-event .fc-event-title {
+            font-size: var(--fc-small-font-size);
+            font-style: italic;
+            margin: 0.5em;
+            display: none;
+        }
+
+        .fc .fc-bg-event .fc-event-title {
+            font-size: var(--fc-small-font-size);
+            font-style: italic;
+            margin: 0.5em;
+            display: none;
+        }
+
+    .fc-event.fc-event-start.fc-bg-event {
+        height: 13px;
+        text-align: center;
+        padding-top: 2px;
+        margin-top: 19px;
+    }
+
+    .fc-event.fc-event-start.fc-event-end.fc-event-past.travel-event.fc-bg-event {
+        height: 1px;
+        text-align: center;
+        padding-top: 0px;
+        border-top: 1px dotted;
+        color: darkgray;
+        margin-top: 24px;
+    }
+
+    .fc-event.fc-event-start.fc-event-end.fc-event-today.fc-event-future.travel-event.fc-bg-event {
+        height: 1px;
+        text-align: center;
+        padding-top: 0px;
+        border-top: 1px dotted;
+        color: darkgray;
+        margin-top: 24px;
+    }
+
+    .fc-event.fc-event-start.fc-event-end.fc-event-future.travel-event.fc-bg-event {
+        height: 1px;
+        text-align: center;
+        padding-top: 0px;
+        border-top: 1px dotted;
+        color: darkgray;
+        margin-top: 24px;
+    }
+
+    /* Show title for travel events when gap > 30 min, hide when gap <= 30 min */
+    .travel-event.fc-bg-event .fc-event-title {
+        display: block !important;
+        visibility: visible !important;
+        font-size: 8.6px !important;
+        font-style: normal !important;
+        color: #333 !important;
+        text-align: center !important;
+        padding: 2px 0 !important;
+    }
+    
+    /* Hide title when it's empty (gap <= 30 min) */
+    .travel-event.fc-bg-event .fc-event-title:empty {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    .geowise-company .internal-scheduler .step2 input {
+        padding: 0;
+        width: 200px;
+        border: none;
+        position: relative;
+        z-index: 1;
+        background-color: transparent;
+    }
+
+    input#myDateRange {
+        border: none;
+        margin-left: 8px;
+    }
+
+    img.calendar-icon {
+        position: relative;
+        top: 4px;
+        margin-left: 30px;
+    }
+
+    /* Make SweetAlert smaller */
+    .sweet-alert {
+        padding: 15px !important; /* smaller padding */
+        font-size: 14px !important;
+    }
+
+        /* Hide the default close icon in SweetAlert v1 */
+        .sweet-alert .sa-close {
+            display: none !important;
+        }
+
+    .sweet-overlay,
+    .sweet-alert {
+        z-index: 99999 !important;
+    }
+
+        /* Style the confirm button */
+        .sweet-alert .confirm {
+            background-color: #000 !important; /* black background */
+            color: #fff !important; /* white text */
+            width: 100px !important;
+            height: 25px !important;
+            font-size: 13px !important;
+            line-height: 25px !important;
+            padding: 0 !important;
+            border-radius: 4px !important;
+            border: none !important;
+        }
+
+    @media screen and (max-width: 767px) {
+        .fc .fc-toolbar.fc-header-toolbar {
+            display: flex;
+            flex-direction: column;
+        }
+
+        p#calendarHeading {
+            margin-left: 0px;
+            margin-bottom: 0px;
+        }
+
+        .fc-direction-ltr {
+            max-height: 100%;
+            margin-left: 0px;
+        }
+
+        div#calendar {
+            height: 760px;
+        }
+
+        .dv-content-page {
+            height: 770px;
+        }
+
+        input#myDateRange {
+            margin-left: 8px;
+            /*width: 190px;*/
+            /*margin-bottom: 20px;*/
+        }
+
+        .geowise-company .internal-scheduler .step2 input {
+            padding: 0;
+            /*width: unset;*/
+            border: none;
+            position: relative;
+            z-index: 1;
+        }
+
+        .fc .fc-toolbar.fc-header-toolbar {
+            margin-top: 0px;
+        }
+
+        img.calendar-icon {
+            position: relative;
+            top: 4px;
+            margin-left: 0px;
+        }
+
+        .custom-date-input {
+            text-align: center;
+        }
+    }
+
+    #newBookingPopup select#bookingProvider,
+    #newBookingPopup select#bookingService {
+        min-width: auto !important;
+        width: 100% !important;
+    }
+
+    #addressPickerModal {
+        scrollbar-width: none; 
+        -ms-overflow-style: none;
+    }
+
+    #addressPickerModal::-webkit-scrollbar {
+        display: none;
+    }
+
+.fc-resourceTimelineWeek .fc-timeline-bg-harness,
+.fc-resourceTimelineMonth .fc-timeline-bg-harness,
+.fc-resourceTimelineCustomWeekly .fc-timeline-bg-harness,
+.fc-resourceTimelineCustomMonthly .fc-timeline-bg-harness {
+  display: none !important;
+}
+
+.fc-resourceTimelineWeek .travel-event,
+.fc-resourceTimelineMonth .travel-event,
+.fc-resourceTimelineCustomWeekly .travel-event,
+.fc-resourceTimelineCustomMonthly .travel-event {
+  display: none !important;
+}
+
+.fc-resourceTimelineDay .travel-event {
+  display: block;
+}
+
+.fc-resourceTimelineWeek .fc-timeline-event[class*="fc-bg-event"],
+.fc-resourceTimelineMonth .fc-timeline-event[class*="fc-bg-event"],
+.fc-resourceTimelineCustomWeekly .fc-timeline-event[class*="fc-bg-event"],
+.fc-resourceTimelineCustomMonthly .fc-timeline-event[class*="fc-bg-event"] {
+  display: none !important;
+}
+.fc-resourceTimelineMonth-view .fc-event.fc-event-start.fc-event-end.fc-event-past.travel-event.fc-bg-event,
+.fc-resourceTimelineCustomMonthly-view .fc-event.fc-event-start.fc-event-end.fc-event-past.travel-event.fc-bg-event,
+.fc-resourceTimelineCustomWeekly-view .fc-event.fc-event-start.fc-event-end.fc-event-past.travel-event.fc-bg-event,
+.fc-resourceTimelineWeek-view .fc-event.fc-event-start.fc-event-end.fc-event-past.travel-event.fc-bg-event{
+    display: none;
+}
+.fc-resourceTimelineMonth-view .fc-event.fc-event-start.fc-event-end.fc-event-today.fc-event-future.travel-event.fc-bg-event, 
+.fc-resourceTimelineMonth-view .fc-event.fc-event-start.fc-event-end.fc-event-future.travel-event.fc-bg-event{
+    display: none;
+}
+.fc-resourceTimelineCustomMonthly-view .fc-event.fc-event-start.fc-event-end.fc-event-today.fc-event-future.travel-event.fc-bg-event, 
+.fc-resourceTimelineCustomMonthly-view .fc-event.fc-event-start.fc-event-end.fc-event-future.travel-event.fc-bg-event{
+    display: none;
+}
+.fc-resourceTimelineCustomWeekly-view .fc-event.fc-event-start.fc-event-end.fc-event-today.fc-event-future.travel-event.fc-bg-event, 
+.fc-resourceTimelineCustomWeekly-view .fc-event.fc-event-start.fc-event-end.fc-event-future.travel-event.fc-bg-event{
+    display: none;
+}
+.fc-resourceTimelineWeek-view .fc-event.fc-event-start.fc-event-end.fc-event-today.fc-event-future.travel-event.fc-bg-event, 
+.fc-resourceTimelineWeek-view .fc-event.fc-event-start.fc-event-end.fc-event-future.travel-event.fc-bg-event{
+    display: none;
+}
+.rdrMonthsHorizontal .rdrEndEdge,
+.rdrMonthsHorizontal .rdrDayEndPreview{
+    border-bottom-right-radius: 4px;
+    border-top-right-radius: 4px;
+}
+.rdrMonthsHorizontal .rdrStartEdge,
+.rdrMonthsHorizontal .rdrDayStartPreview{
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+}
+
+.rdrMonthsHorizontal .rdrDayStartOfMonth .rdrInRange, .rdrDayStartOfMonth .rdrEndEdge, 
+.rdrMonthsHorizontal .rdrDayStartOfWeek .rdrInRange, .rdrDayStartOfWeek .rdrEndEdge{
+    border-top-left-radius: 4px;
+    border-bottom-left-radius: 4px;
+}
+.rdrMonthsHorizontal .rdrDayEndOfMonth .rdrInRange,
+.rdrMonthsHorizontal .rdrDayEndOfMonth .rdrStartEdge, 
+.rdrMonthsHorizontal .rdrDayEndOfWeek .rdrInRange,
+.rdrMonthsHorizontal .rdrDayEndOfWeek .rdrStartEdge{
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+}

@@ -1,0 +1,67 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.heading {
+  font-size: 23px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.eventTitle {
+  padding: 0 2px;
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 9.6px;
+}
+
+.eventDuration {
+  padding: 0 2px;
+  font-weight: 400;
+  font-size: 9.6px;
+  line-height: 1;
+}
+
+.resourceLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.resourceAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.resourceName {
+  font-weight: 400;
+  font-size: 12.48px;
+}
+
+.resourceUsername {
+  color: #5a7895;
+  font-size: 9.6px;
+}
+
+.fc-toolbar-chunk:nth-child(2) > * {
+    float: none !important;
+    display: inline-flex !important;
+    vertical-align: middle !important;
+}
+
+@media screen and (max-width: 767px) {
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .heading {
+    margin-left: 0;
+  }
+}

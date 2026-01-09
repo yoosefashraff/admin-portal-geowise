@@ -1,0 +1,141 @@
+.container {
+  position: relative;
+}
+
+.inputWrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+}
+
+.input {
+  padding: 5px 10px;
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+  min-width: 200px;
+}
+
+.input:focus {
+  outline: none;
+}
+
+.dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 8px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 16px;
+  padding-top: 6px;
+  z-index: 1000;
+  min-width: 300px;
+}
+
+.dateInputs {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dateInputs > div {
+  flex: 1;
+}
+
+.dateInputs label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  color: #333;
+}
+
+.dateInput {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.quickOptions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.quickOptions button {
+  flex: 1;
+  padding: 6px 12px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.quickOptions button:hover {
+  background: #e8e8e8;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.cancelBtn,
+.applyBtn {
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancelBtn {
+  background: white;
+  border: 1px solid #ddd;
+  color: #333;
+}
+
+.cancelBtn:hover {
+  background: #f5f5f5;
+}
+
+.applyBtn {
+  background: #091d30;
+  border: none;
+  color: white;
+}
+
+.applyBtn:hover {
+  background: #0a2540;
+}
+
+@media screen and (max-width: 767px) {
+  .dropdown {
+    right: auto;
+    left: 0;
+    min-width: calc(100vw - 40px);
+  }
+
+  .dateInputs {
+    flex-direction: column;
+  }
+
+  .quickOptions {
+    flex-direction: column;
+  }
+}
