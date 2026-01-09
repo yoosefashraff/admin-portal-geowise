@@ -71,7 +71,7 @@ export default function ProviderItem({ provider, index, dataLength, handleDelete
 									<DropdownMenuContent className="w-40" align="end">
 									<DropdownMenuGroup>
 											<DropdownMenuItem>
-													<Link className='w-full' href={`/linked-users/${provider.ProviderName}/edit`}>
+													<Link className='w-full' href={`/linked-users/${provider.ProviderId}/edit`}>
 															Edit
 													</Link>
 											</DropdownMenuItem>

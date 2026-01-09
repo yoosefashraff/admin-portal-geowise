@@ -28,8 +28,6 @@ const formSchema = z.object({
 
 export default function AddNewProviderPage() {
 
-	const [value, setValue] = useState<string>();
-
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -118,7 +116,7 @@ export default function AddNewProviderPage() {
                     </div>
                     <div className="flex flex-col gap-2">
                       <FormControl>
-                        <Input className="h-11" placeholder="Service name" {...field} />
+                        <Input className="h-11" placeholder="Enter full name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </div>
@@ -135,7 +133,7 @@ export default function AddNewProviderPage() {
                     </div>
                     <div className="flex flex-col gap-2">
                       <FormControl>
-                        <Input className="h-11" placeholder="Service name" {...field} />
+                        <Input className="h-11" placeholder="Enter user name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </div>
@@ -145,7 +143,7 @@ export default function AddNewProviderPage() {
 
               <FormField
                 control={form.control}
-                name="UserName"
+                name="Email"
                 render={({ field }) => (
                   <FormItem className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 mb-4 border-b-1 border-gray-200">
                     <div className="flex flex-col gap-2">
@@ -153,7 +151,63 @@ export default function AddNewProviderPage() {
                     </div>
                     <div className="flex flex-col gap-2">
                       <FormControl>
-                        <Input className="h-11" placeholder="Service name" {...field} />
+                        <Input className="h-11" placeholder="Enter email address" type="email" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </div>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="PhoneNumber"
+                render={({ field }) => (
+                  <FormItem className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 mb-4 border-b-1 border-gray-200">
+                    <div className="flex flex-col gap-2">
+                      <label className="font-medium">Phone number</label>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <FormControl>
+                        <div className="
+                          flex items-center w-full
+                          border border-gray-300
+                          rounded-md px-4 py-2
+                          bg-white
+                          text-gray-700
+                          focus-within:ring-2 focus-within:ring-blue-500
+                        ">
+                          <PhoneInput
+                            international
+                            defaultCountry="US"
+                            value={field.value}
+                            onChange={(val) => {
+                              field.onChange(val || '');
+                              // Extract country code
+                              if (val) {
+                                const countryCode = val.substring(0, val.indexOf(' ') || 0);
+                                form.setValue('CountryCode', countryCode || '+1');
+                              }
+                            }}
+                            className="w-full flex items-center gap-2"
+                            countrySelectComponent={({ value, onChange, options }) => (
+                              <select
+                                value={value}
+                                onChange={(e) => {
+                                  onChange(e.target.value);
+                                  form.setValue('CountryCode', e.target.value);
+                                }}
+                                className="bg-transparent outline-none cursor-pointer pr-1 font-medium"
+                              >
+                                {options.map((opt: {value: string}, index: number) => (
+                                  <option key={index} value={opt.value}>
+                                    {opt.value}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          />
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </div>
@@ -164,54 +218,6 @@ export default function AddNewProviderPage() {
             </form>
           </Form>
 					<div className="space-y-4">
-
-						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-							<div className="flex items-center">
-								<label className="font-medium">Phone number</label>
-							</div>
-							<div className="flex flex-col gap-2">
-								<div className="
-										flex items-center w-full
-										border border-gray-300
-										rounded-md px-4 py-2
-										bg-white
-										text-gray-700
-										focus-within:ring-2 focus-within:ring-blue-500
-									">
-									<PhoneInput
-										international
-										defaultCountry="US"
-										value={value}
-										onChange={setValue}
-										className="w-full flex items-center gap-2"
-										countrySelectComponent={({ value, onChange, options }) => (
-											<select
-												value={value}
-												onChange={(e) => onChange(e.target.value)}
-												className="bg-transparent outline-none cursor-pointer pr-1 font-medium"
-											>
-												{options.map((opt: {value: string}, index: number) => (
-													<option key={index} value={opt.value}>
-														{opt.value}
-													</option>
-												))}
-											</select>
-										)}
-									/>
-								</div>
-							</div>
-						</div>
-						<Separator className="bg-gray-200 h-0.25" />
-
-						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-							<div className="flex items-center">
-								<label className="font-medium">Email</label>
-							</div>
-							<div className="flex flex-col gap-2">
-								<Input className="h-11 md:text-[16px] border-gray-300" placeholder="user@contact.com" />
-							</div>
-						</div>
-						<Separator className="bg-gray-200 h-0.25" />
 
 
 
@@ -263,7 +269,7 @@ export default function AddNewProviderPage() {
 								<div className="flex-1 relative">
 									<Search className="w-4 h-4 focus-visible:outline-0 focus-visible:shadow-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
 									<Input
-										placeholder="Search by zone’s namez"
+										placeholder="Search by zone's name"
 										className="pl-10 pr-4 h-11 py-3 md:text-[16px] bg-gray-50 border-0"
 									/>
 								</div>
