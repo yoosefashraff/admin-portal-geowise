@@ -3,7 +3,7 @@
 import { DashboardSidebar } from '@/components/layout/DashboardSidebar';
 import {useAuthStore} from "@/lib/store/authStore";
 import {useEffect} from "react";
-import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { getCurrentUserAction } from '@/lib/actions/auth.actions';
 import { cn } from '@/lib/utils';
 
@@ -11,21 +11,22 @@ export default function ProtectedLayout({children}: {children: React.ReactNode;}
 
   const { cookie, isLoading } = useAuthStore.getState();
   const { logout } = useAuthStore();
+  const router = useRouter();
 
   useEffect(() => {
     if (!isLoading && !cookie) {
-      redirect('/login');
+      router.replace('/login');
     }else{
       const getCurrentUser = async () => {
         const response = await getCurrentUserAction();
         if(response.Status !== 201){
           logout();
-          redirect('/login');
+          router.replace('/login');
         }
       }
       getCurrentUser();
     }
-  }, [cookie, isLoading]);
+  }, [cookie, isLoading, router, logout]);
 
   return (
     <div className="flex h-screen bg-gray-50">
