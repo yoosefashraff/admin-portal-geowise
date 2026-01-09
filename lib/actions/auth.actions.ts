@@ -40,16 +40,23 @@ export async function loginAction(data: LoginRequest) {
       throw new Error("No authentication cookie received from server. Please check your credentials.");
     }
 
-    const cookieStore = await cookies();
+    try {
+      const cookieStore = await cookies();
 
-    cookieStore.set({
-      name: "xyzCompAuthorize",
-      value: json.Cookie,
-      path: "/",
-      httpOnly: false,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    });
+      cookieStore.set({
+        name: "xyzCompAuthorize",
+        value: json.Cookie,
+        path: "/",
+        httpOnly: false,
+        sameSite: "lax",
+        // Only set secure in production if we're on HTTPS
+        secure: false, // Let browser handle secure cookies automatically
+      });
+    } catch (cookieError: any) {
+      console.error("Failed to set cookie:", cookieError);
+      // Still return the response even if cookie setting fails
+      // The client-side store will handle it
+    }
 
     return json;
   } catch (error: any) {

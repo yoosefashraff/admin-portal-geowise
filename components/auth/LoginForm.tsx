@@ -36,11 +36,14 @@ export function LoginForm() {
       setIsLoading(true);
       await login(data.UserName, data.Password);
       toast.success('Login successful!');
-      // Small delay to ensure cookie is set before redirect
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Small delay to ensure state is updated before redirect
+      await new Promise(resolve => setTimeout(resolve, 200));
       router.push('/dashboard');
     } catch (error: any) {
-      toast.error(error?.message || 'Login failed');
+      console.error('Login error:', error);
+      const errorMessage = error?.message || 'Login failed. Please check your credentials and try again.';
+      toast.error(errorMessage);
+    } finally {
       setIsLoading(false);
     }
   };
