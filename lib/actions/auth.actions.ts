@@ -7,6 +7,10 @@ import serverAPI from "../api/axios-server";
 const API = process.env.NEXT_PUBLIC_API_URL;
 
 export async function loginAction(data: LoginRequest) {
+  if (!API) {
+    throw new Error("API URL is not configured");
+  }
+
   try {
     const res = await fetch(`${API}/company/userlogin`, {
       method: "POST",
@@ -15,15 +19,25 @@ export async function loginAction(data: LoginRequest) {
       cache: "no-store",
     });
 
-    const json = await res.json().catch(() => ({}));
+    // Handle non-JSON responses
+    let json: any = {};
+    const contentType = res.headers.get("content-type");
+    
+    if (contentType && contentType.includes("application/json")) {
+      json = await res.json().catch(() => ({}));
+    } else {
+      const text = await res.text();
+      throw new Error(text || `Login failed with status ${res.status}`);
+    }
 
     if (!res.ok) {
-      throw new Error(json.message || json.Message || "Login failed");
+      const errorMessage = json.message || json.Message || json.error || `Login failed with status ${res.status}`;
+      throw new Error(errorMessage);
     }
 
     // Ensure we have a cookie value
     if (!json.Cookie) {
-      throw new Error("No authentication cookie received from server");
+      throw new Error("No authentication cookie received from server. Please check your credentials.");
     }
 
     const cookieStore = await cookies();
@@ -39,8 +53,11 @@ export async function loginAction(data: LoginRequest) {
 
     return json;
   } catch (error: any) {
-    console.error("Login action error:", error);
-    throw error;
+    // Re-throw with a more user-friendly message
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(error?.message || "An unexpected error occurred during login");
   }
 }
 
