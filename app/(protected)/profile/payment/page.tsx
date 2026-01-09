@@ -36,7 +36,7 @@ export default function ProfilePaymentPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4">
+    <div className="max-w-5xl mx-auto py-8 px-6">
       <ProfilePageWrapper
         panelName="payment"
       >

@@ -8,6 +8,11 @@ const saira = Saira({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'Geowise',
   description: '',
+  icons: {
+    icon: '/favicon.svg',
+    shortcut: '/favicon.svg',
+    apple: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({
@@ -17,7 +22,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi" className="overflow-hidden">
-      <body className={saira.className}>
+      <body className={saira.className} suppressHydrationWarning>
         {children}
         <Toaster position="top-right" richColors />
       </body>

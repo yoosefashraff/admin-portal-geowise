@@ -27,7 +27,7 @@ import Link from "next/link";
 export default function EditTeam() {
 
   return (
-    <div className='max-w-5xl mx-auto py-8 px-4'>
+    <div className='max-w-5xl mx-auto py-8 px-6'>
       {/* Header */}
       <div className="flex items-start">
         <DashboardHeader

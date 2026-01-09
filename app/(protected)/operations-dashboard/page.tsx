@@ -6,8 +6,9 @@ import { StaffPanel } from "@/components/operations-dashboard/staff-panel"
 import { MapPanel } from "@/components/operations-dashboard/map-panel"
 import { BottomStrip } from "@/components/operations-dashboard/bottom-strip"
 import { FilterDrawer } from "@/components/operations-dashboard/filter-drawer"
-import { mockStaff, mockJobs, mockAlerts, mockActivities } from "@/lib/mock-data"
 import type { Staff, Job, Alert, Activity, Filters, StaffStatus, JobStatus } from "@/lib/types"
+// TODO: Replace with real API calls for staff, jobs, alerts, and activities
+// The operations dashboard requires specific data structures that need to be mapped from API responses
 
 export default function OperationsDashboardPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
@@ -82,10 +83,16 @@ export default function OperationsDashboardPage() {
     document.body.style.userSelect = "none"
   }
 
-  const staff: Staff[] = mockStaff
-  const jobs: Job[] = mockJobs
-  const alerts: Alert[] = mockAlerts
-  const activities: Activity[] = mockActivities
+  // TODO: Replace with real API data
+  // These should be fetched from appropriate endpoints:
+  // - Staff: Map from providers API (getAllProvidersForCompany)
+  // - Jobs: Map from bookings API (fetchBookings)
+  // - Alerts: Need to check if there's an alerts API endpoint
+  // - Activities: Need to check if there's an activities/logs API endpoint
+  const staff: Staff[] = []
+  const jobs: Job[] = []
+  const alerts: Alert[] = []
+  const activities: Activity[] = []
 
   const kpis = {
     activeStaff: staff.filter((s) => s.status !== "offline").length,

@@ -10,7 +10,12 @@ interface availabilityCardProps{
 export default function AvailabilityDayCard({dayOfWeek, checked = true, onCheckedChange} : availabilityCardProps){
 
   return (
-    <div className="px-6 py-4 bg-white space-y-3">
+    <div 
+      className="px-6 py-4 bg-white space-y-3"
+      style={{
+        boxShadow: '0px 4px 24px -2px rgba(16, 24, 40, 0.01), 0px 2px 24px -2px rgba(16, 24, 40, 0.06)'
+      }}
+    >
       <div className="flex items-center justify-between">
         <div className="font-medium">{ dayOfWeek }</div>
         <Switch 

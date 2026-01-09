@@ -1,25 +1,27 @@
 
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { OpeningHour } from "@/types/opening-hours";
 import CustomSwitch from "@/components/ui/custom-switch";
 
-const mockOpeningHours: OpeningHour[] = [
-    { day: "Monday", isOpen: true },
-    { day: "Tuesday", isOpen: true },
-    { day: "Wednesday", isOpen: true },
-    { day: "Thursday", isOpen: false },
-    { day: "Friday", isOpen: false },
-    { day: "Saturday", isOpen: false },
-    { day: "Sunday", isOpen: false },
-];
+const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 interface OpeningHoursDayProps {
+  initialHours?: OpeningHour[];
   onChange: (day: string, isOpen: boolean, selected: OpeningHour[]) => void;
 }
 
-export default function OpeningHoursDay({ onChange }: OpeningHoursDayProps) {
-    const [hours, setHours] = useState(mockOpeningHours);
+export default function OpeningHoursDay({ initialHours, onChange }: OpeningHoursDayProps) {
+    // Initialize with default closed state if no initial data provided
+    const defaultHours: OpeningHour[] = DAYS_OF_WEEK.map(day => ({ day, isOpen: false }));
+    const [hours, setHours] = useState<OpeningHour[]>(initialHours || defaultHours);
+
+    // Update state when initialHours prop changes
+    useEffect(() => {
+        if (initialHours && initialHours.length > 0) {
+            setHours(initialHours);
+        }
+    }, [initialHours]);
 
     const handleToggle = (day: string, isOpen: boolean) => {
         setHours(prev => 

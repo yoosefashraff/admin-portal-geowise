@@ -13,7 +13,12 @@ import {
   Menu,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Package,
+  MapPin,
+  Users,
+  Clock,
+  ChevronDown
 } from 'lucide-react';
 import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
@@ -23,14 +28,19 @@ import {MenuSection} from "@/lib/types/menu.types";
 import MenuItem from "@/components/shared/MenuItem";
 import Link from "next/link";
 import {useAuthStore} from "@/lib/store/authStore";
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 export function DashboardSidebar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { logout, user } = useAuthStore();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  // Track collapsed state for each section (default: all expanded)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  
+  // Reorganized menu structure following clear information architecture
   const menuConfigs: MenuSection[] = [
     {
-      title: "GENERAL",
+      title: "Core",
       items: [
         {
           label: "Dashboard",
@@ -45,22 +55,47 @@ export function DashboardSidebar() {
       ],
     },
     {
-      title: "GENERAL",
+      title: "Operations",
       items: [
-        {
-          label: "Service Zones",
-          icon: PanelLeftClose,
-          href: "/zones",
-        },
         {
           label: "Scheduler",
           icon: CalendarClock,
           href: "/scheduler",
         },
+        {
+          label: "Service Requests",
+          icon: Clock,
+          href: "/scheduler/service-requests",
+        },
+        {
+          label: "Availability",
+          icon: CalendarClock,
+          href: "/scheduler/availability",
+        },
       ],
     },
     {
-      title: "ACCOUNT",
+      title: "Management",
+      items: [
+        {
+          label: "Services",
+          icon: Package,
+          href: "/services",
+        },
+        {
+          label: "Service Zones",
+          icon: MapPin,
+          href: "/zones",
+        },
+        {
+          label: "Linked Users",
+          icon: Users,
+          href: "/linked-users",
+        },
+      ],
+    },
+    {
+      title: "Account",
       items: [
         {
           label: "Settings",
@@ -68,26 +103,15 @@ export function DashboardSidebar() {
           href: "/settings",
           children: [
             {
-              label: "Teams",
-              icon: Settings,
-              href: "/teams",
-            },
-            {
               label: "Details",
               icon: Settings,
               href: "/profile",
             },
             {
-              label: "Linked users",
+              label: "Teams",
               icon: Settings,
-              href: "/linked-users",
-              // badge: "10",
+              href: "/teams",
             },
-            {
-              label: "Services",
-              icon: Settings,
-              href: "/services",
-            }
           ],
         }
       ],
@@ -126,21 +150,24 @@ export function DashboardSidebar() {
       {/* Sidebar */}
       <div className={cn(
         "fixed h-screen lg:static inset-y-0 left-0 z-40",
-        "w-78 bg-white border-r border-gray-200 flex flex-col",
-        "transition-transform transition-all duration-300 ease-in-out",
-        isCollapsed ? "w-18" : "w-78",
+        "bg-white border-r border-gray-200 flex flex-col",
+        "transition-all duration-300 ease-in-out",
+        isCollapsed ? "w-20" : "w-78",
         mobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
         {/* Logo */}
-        <div className="hidden lg:flex py-3 px-6 pr-3 items-center justify-between">
+        <div className={cn(
+          "hidden lg:flex py-3 items-center border-b border-gray-200",
+          isCollapsed ? "justify-center px-2" : "justify-between px-6 pr-3"
+        )}>
           <Link href="/dashboard" className="flex items-center gap-2">
             {isCollapsed ? (
-              <div className='h-12 flex items-center'><Image src="/images/logo-s.svg" alt="GeoWise" width={20} height={24}/></div>
-              
+              <div className='h-12 flex items-center justify-center'>
+                <Image src="/images/logo-s.svg" alt="GeoWise" width={20} height={24}/>
+              </div>
             ) : (
               <Image src="/images/logo.svg" alt="GeoWise" width={116} height={48}/>
             )}
-            
           </Link>
           {!isCollapsed && (
             <Button 
@@ -152,7 +179,6 @@ export function DashboardSidebar() {
               <ChevronLeft className="w-4 h-4"/>
             </Button>
           )}
-          
         </div>
 
         {/* Search */}
@@ -167,10 +193,10 @@ export function DashboardSidebar() {
             </div>
           </div>
         ) : (
-          <div className='p-4'>
+          <div className='p-2 border-b border-gray-200 flex justify-center'>
             <Button 
               variant="ghost" 
-              className="cursor-pointer" 
+              className="cursor-pointer w-full justify-center" 
               size="icon"
               onClick={() => setIsCollapsed(!isCollapsed)}
             >
@@ -180,49 +206,115 @@ export function DashboardSidebar() {
         )}
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-
-          {menuConfigs.map((menuSection, index) => (
-            <div className="mb-12" key={index}>
-              {!isCollapsed && (
-                <div className="text-xs font-medium text-gray-400 uppercase mb-3 mt-2">{menuSection.title}</div>
-              )}
-              {menuSection.items.map((item, index2) => {
-                return <MenuItem key={index2} menuItem={item} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
-              })}
-            </div>
-          ))}
-
+        <nav className={cn(
+          "flex-1 overflow-y-auto",
+          isCollapsed ? "p-2 space-y-1" : "p-4 space-y-1"
+        )}>
+          {menuConfigs.map((menuSection, index) => {
+            const sectionKey = (menuSection.title || '').toLowerCase();
+            const isSectionCollapsed = collapsedSections[sectionKey] ?? false;
+            
+            return (
+              <div className={cn(isCollapsed ? "mb-4" : "mb-8")} key={index}>
+                {!isCollapsed && (
+                  <button
+                    onClick={() => {
+                      setCollapsedSections(prev => ({
+                        ...prev,
+                        [sectionKey]: !isSectionCollapsed
+                      }));
+                    }}
+                    className="w-full flex items-center justify-between text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 mt-2 hover:text-gray-700 transition-colors group"
+                  >
+                    <span>{menuSection.title}</span>
+                    <ChevronDown 
+                      className={cn(
+                        "w-4 h-4 transition-transform duration-200",
+                        isSectionCollapsed ? "-rotate-90" : ""
+                      )} 
+                    />
+                  </button>
+                )}
+                {(!isSectionCollapsed || isCollapsed) && menuSection.items.map((item, index2) => {
+                  // Collect all menu items (including children) for active state comparison
+                  const allMenuItems = menuConfigs.flatMap(section => 
+                    section.items.flatMap(item => [
+                      item,
+                      ...(item.children || [])
+                    ])
+                  )
+                  return <MenuItem 
+                    key={index2} 
+                    menuItem={item} 
+                    isCollapsed={isCollapsed} 
+                    setIsCollapsed={setIsCollapsed}
+                    allMenuItems={allMenuItems}
+                  />
+                })}
+              </div>
+            );
+          })}
         </nav>
 
         {/* User Profile */}
-        <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center justify-between gap-3">
-            <Link 
-              href="/profile" 
-              className="flex items-center gap-3"
-              onClick={() => setIsCollapsed(false)}
+        <div className={cn(
+          "border-t border-gray-200",
+          isCollapsed ? "p-2" : "p-4"
+        )}>
+          {isCollapsed ? (
+            <div className="flex flex-col items-center gap-2">
+              <Link 
+                href="/profile" 
+                className="flex items-center justify-center"
+                onClick={() => setIsCollapsed(false)}
               >
-              <Image 
-                src={user?.Image || "/images/avatar.png"}
-                alt="User avatar" 
-                width={40} height={40} 
-                className="rounded-full"
-                unoptimized
+                <Image 
+                  src={user?.Image || "/images/avatar.png"}
+                  alt="User avatar" 
+                  width={36} height={36} 
+                  className="rounded-full"
+                  unoptimized
                 />
-              {!isCollapsed && (
+              </Link>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="w-full justify-center"
+                    onClick={() => handleLogout()}
+                  >
+                    <LogOut className="w-5 h-5"/>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  Logout
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <Link 
+                href="/profile" 
+                className="flex items-center gap-3"
+                onClick={() => setIsCollapsed(false)}
+              >
+                <Image 
+                  src={user?.Image || "/images/avatar.png"}
+                  alt="User avatar" 
+                  width={40} height={40} 
+                  className="rounded-full"
+                  unoptimized
+                />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-gray-900 truncate">{user?.FullName}</div>
-                  {/* <div className="text-xs text-gray-500 truncate">{user?.UserEmail}</div> */}
                 </div>
-              )}
-            </Link>
-            {!isCollapsed && (
+              </Link>
               <Button variant="ghost" size="icon" onClick={() => handleLogout()}>
                 <LogOut className="w-5 h-5"/>
               </Button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

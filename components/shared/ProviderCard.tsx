@@ -20,9 +20,18 @@ export default function ProviderCard({ provider, selectProvider, setSelectProvid
 
   return (
     <div 
-      className={cn(`bg-white rounded-lg px-6 py-4  shadow-[0px_2px_24px_rgba(16,24,40,0.06)] border-2 border-transparent hover:border-gray-900 hover:shadow-md transition-shadow cursor-pointer`,
-        selectProvider === provider.ProviderId.toString() && "border-gray-900 shadow-md"
+      className={cn(`bg-white rounded-lg px-6 py-4 border-2 border-transparent hover:border-gray-900 transition-all cursor-pointer`,
+        selectProvider === provider.ProviderId.toString() && "border-gray-900"
       )}
+      style={{
+        boxShadow: '0px 4px 24px -2px rgba(16, 24, 40, 0.01), 0px 2px 24px -2px rgba(16, 24, 40, 0.06)'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = '0px 4px 24px -2px rgba(16, 24, 40, 0.01), 0px 2px 24px -2px rgba(16, 24, 40, 0.06), 0px 4px 6px -1px rgba(0, 0, 0, 0.1)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = '0px 4px 24px -2px rgba(16, 24, 40, 0.01), 0px 2px 24px -2px rgba(16, 24, 40, 0.06)';
+      }}
       onClick={() => setSelectProvider(provider.ProviderId.toString())}
     >
       <div className="flex items-start gap-3 flex-1 mb-3">

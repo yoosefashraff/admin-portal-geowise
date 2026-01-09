@@ -22,13 +22,49 @@ export default function MapField({value, onChange}: MapFieldProps) {
   const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   const mapKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyAq2Vf7Ss-yLruim9i_vog14LwVGPBmt_g';
+
+  // Initialize autocomplete separately
+  const initAutocomplete = (map: google.maps.Map) => {
+    if (!searchInputRef.current || autocompleteRef.current) return;
+    
+    if (window.google?.maps?.places?.Autocomplete) {
+      try {
+        const autocompleteInstance = new window.google.maps.places.Autocomplete(
+          searchInputRef.current,
+          {
+            fields: ['formatted_address', 'geometry', 'name'],
+          }
+        );
+
+        autocompleteInstance.addListener('place_changed', () => {
+          const place = autocompleteInstance.getPlace();
+
+          if (!place.geometry || !place.geometry.location) {
+            return;
+          }
+
+          // Update map position
+          map.setCenter(place.geometry.location);
+          map.setZoom(15);
+
+          // Update search query
+          setSearchQuery(place.formatted_address || place.name);
+        });
+
+        autocompleteRef.current = autocompleteInstance;
+      } catch (error) {
+        console.error('Failed to initialize Autocomplete:', error);
+      }
+    }
+  };
 
   // Initialize Google Maps
   useEffect(() => {
     const initMap = () => {
-      if (!window.google || !mapRef.current) return;
+      if (!window.google || !window.google.maps || !mapRef.current) return;
       
       // Create map
       const newMapInstance = new window.google.maps.Map(mapRef.current, {
@@ -61,34 +97,12 @@ export default function MapField({value, onChange}: MapFieldProps) {
 
       setMapInstance(newMapInstance);
 
-      // Initialize autocomplete
-      if (searchInputRef.current) {
-        const autocompleteInstance = new window.google.maps.places.Autocomplete(
-          searchInputRef.current,
-          {
-            fields: ['formatted_address', 'geometry', 'name'],
-          }
-        );
-
-        autocompleteInstance.addListener('place_changed', () => {
-          const place = autocompleteInstance.getPlace();
-
-          if (!place.geometry || !place.geometry.location) {
-            return;
-          }
-
-          // Update map position
-          newMapInstance.setCenter(place.geometry.location);
-          newMapInstance.setZoom(15);
-
-          // Update search query
-          setSearchQuery(place.formatted_address || place.name);
-        });
-      }
+      // Try to initialize autocomplete if places library is already loaded
+      initAutocomplete(newMapInstance);
     };
 
     // Load Google Maps API
-    if (window.google) {
+    if (window.google?.maps) {
       isGoogleMapsLoaded = true;
       initMap();
     } else if (!isGoogleMapsLoading && !isGoogleMapsLoaded) {
@@ -96,11 +110,20 @@ export default function MapField({value, onChange}: MapFieldProps) {
       
       if (existingScript) {
         isGoogleMapsLoading = true;
-        existingScript.addEventListener('load', () => {
+        const handleLoad = () => {
           isGoogleMapsLoaded = true;
           isGoogleMapsLoading = false;
-          initMap();
-        });
+          // Wait a bit for places library to be available
+          setTimeout(() => {
+            initMap();
+          }, 200);
+        };
+        
+        if (window.google?.maps) {
+          handleLoad();
+        } else {
+          existingScript.addEventListener('load', handleLoad);
+        }
       } else {
         isGoogleMapsLoading = true;
         const script = document.createElement('script');
@@ -110,7 +133,10 @@ export default function MapField({value, onChange}: MapFieldProps) {
         script.onload = () => {
           isGoogleMapsLoaded = true;
           isGoogleMapsLoading = false;
-          initMap();
+          // Wait a bit for places library to be available
+          setTimeout(() => {
+            initMap();
+          }, 200);
         };
         script.onerror = () => {
           isGoogleMapsLoading = false;
@@ -120,7 +146,7 @@ export default function MapField({value, onChange}: MapFieldProps) {
       }
     } else if (isGoogleMapsLoading) {
       const checkInterval = setInterval(() => {
-        if (window.google && isGoogleMapsLoaded) {
+        if (window.google?.maps && isGoogleMapsLoaded) {
           clearInterval(checkInterval);
           initMap();
         }
@@ -128,7 +154,27 @@ export default function MapField({value, onChange}: MapFieldProps) {
 
       return () => clearInterval(checkInterval);
     }
-  }, []);
+  }, [value, onChange]);
+
+  // Separate effect to initialize autocomplete when places library becomes available
+  useEffect(() => {
+    if (mapInstance && searchInputRef.current && !autocompleteRef.current) {
+      const checkPlaces = setInterval(() => {
+        if (window.google?.maps?.places?.Autocomplete) {
+          clearInterval(checkPlaces);
+          initAutocomplete(mapInstance);
+        }
+      }, 100);
+
+      // Cleanup interval after 5 seconds
+      const timeout = setTimeout(() => clearInterval(checkPlaces), 5000);
+
+      return () => {
+        clearInterval(checkPlaces);
+        clearTimeout(timeout);
+      };
+    }
+  }, [mapInstance]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
