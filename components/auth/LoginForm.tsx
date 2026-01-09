@@ -36,10 +36,11 @@ export function LoginForm() {
       setIsLoading(true);
       await login(data.UserName, data.Password);
       toast.success('Login successful!');
+      // Small delay to ensure cookie is set before redirect
+      await new Promise(resolve => setTimeout(resolve, 100));
       router.push('/dashboard');
     } catch (error: any) {
       toast.error(error?.message || 'Login failed');
-    } finally {
       setIsLoading(false);
     }
   };

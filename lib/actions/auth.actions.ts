@@ -7,37 +7,57 @@ import serverAPI from "../api/axios-server";
 const API = process.env.NEXT_PUBLIC_API_URL;
 
 export async function loginAction(data: LoginRequest) {
-  const res = await fetch(`${API}/company/userlogin`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-    cache: "no-store",
-  });
+  try {
+    const res = await fetch(`${API}/company/userlogin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+      cache: "no-store",
+    });
 
-  const json = await res.json().catch(() => ({}));
+    const json = await res.json().catch(() => ({}));
 
-  if (!res.ok) {
-    throw new Error(json.message || "Login failed");
+    if (!res.ok) {
+      throw new Error(json.message || json.Message || "Login failed");
+    }
+
+    // Ensure we have a cookie value
+    if (!json.Cookie) {
+      throw new Error("No authentication cookie received from server");
+    }
+
+    const cookieStore = await cookies();
+
+    cookieStore.set({
+      name: "xyzCompAuthorize",
+      value: json.Cookie,
+      path: "/",
+      httpOnly: false,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+
+    return json;
+  } catch (error: any) {
+    console.error("Login action error:", error);
+    throw error;
   }
-
-  const cookieStore = await cookies();
-
-  cookieStore.set({
-    name: "xyzCompAuthorize",
-    value: json.Cookie,
-    path: "/",
-    httpOnly: false,
-  });
-
-  return json;
 }
 
 export async function getCurrentUserAction() : Promise<{Status : number, Message : string, Object ?: string}> {
   try {
+    const cookieStore = await cookies();
+    const cookie = cookieStore.get("xyzCompAuthorize");
+    
+    if (!cookie?.value) {
+      return {Status : 401, Message : "No authentication cookie found"};
+    }
+
     const response : {Object : string, Status : number, Message : string} = await serverAPI.get('/company/getcompanyname');
     return response;
   } catch (err: any) {
-    const errorMessage = err.response?.statusText || err.message;
+    console.error("Get current user error:", err);
+    const errorMessage = err.response?.statusText || err.message || "Authentication check failed";
     return {Status : 500, Message : errorMessage};
   }
 }
