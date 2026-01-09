@@ -8,25 +8,48 @@ const API = process.env.NEXT_PUBLIC_API_URL;
 
 export async function loginAction(data: LoginRequest) {
   if (!API) {
-    throw new Error("API URL is not configured");
+    throw new Error("API URL is not configured. Please check your environment variables.");
   }
 
   try {
-    const res = await fetch(`${API}/company/userlogin`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-      cache: "no-store",
-    });
+    // Add timeout to fetch request
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+    let res: Response;
+    try {
+      res = await fetch(`${API}/company/userlogin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error("Request timeout. Please check your internet connection and try again.");
+      }
+      if (fetchError.message?.includes('fetch')) {
+        throw new Error("Unable to connect to the server. Please check your API URL configuration.");
+      }
+      throw new Error(fetchError.message || "Network error occurred. Please try again.");
+    }
 
     // Handle non-JSON responses
     let json: any = {};
     const contentType = res.headers.get("content-type");
     
     if (contentType && contentType.includes("application/json")) {
-      json = await res.json().catch(() => ({}));
+      try {
+        json = await res.json();
+      } catch (parseError) {
+        const text = await res.text().catch(() => "Unable to read response");
+        throw new Error(`Invalid JSON response from server: ${text.substring(0, 200)}`);
+      }
     } else {
-      const text = await res.text();
+      const text = await res.text().catch(() => "Unable to read response");
       throw new Error(text || `Login failed with status ${res.status}`);
     }
 
@@ -49,22 +72,24 @@ export async function loginAction(data: LoginRequest) {
         path: "/",
         httpOnly: false,
         sameSite: "lax",
-        // Only set secure in production if we're on HTTPS
-        secure: false, // Let browser handle secure cookies automatically
+        secure: false,
       });
     } catch (cookieError: any) {
-      console.error("Failed to set cookie:", cookieError);
       // Still return the response even if cookie setting fails
       // The client-side store will handle it
+      // Log error but don't fail the login
     }
 
     return json;
   } catch (error: any) {
-    // Re-throw with a more user-friendly message
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error(error?.message || "An unexpected error occurred during login");
+    // Ensure error is serializable for Server Actions
+    const errorMessage = error instanceof Error 
+      ? error.message 
+      : typeof error === 'string' 
+        ? error 
+        : "An unexpected error occurred during login";
+    
+    throw new Error(errorMessage);
   }
 }
 
