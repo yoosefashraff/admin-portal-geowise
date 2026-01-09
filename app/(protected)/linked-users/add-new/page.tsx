@@ -27,7 +27,6 @@ const formSchema = z.object({
 })
 
 export default function AddNewProviderPage() {
-
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -218,7 +217,6 @@ export default function AddNewProviderPage() {
             </form>
           </Form>
 					<div className="space-y-4">
-
 
 
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
