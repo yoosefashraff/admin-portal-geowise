@@ -9,43 +9,73 @@ import { cn } from '@/lib/utils';
 
 export default function ProtectedLayout({children}: {children: React.ReactNode;}) {
 
-  const { cookie, isLoading } = useAuthStore();
-  const { logout } = useAuthStore();
+  const { cookie, user, isAuthenticated, isLoading } = useAuthStore();
+  const { logout, checkAuth, setUser } = useAuthStore();
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(false);
 
   useEffect(() => {
-    // Wait for initial load to complete
+    // Wait for Zustand store to rehydrate from localStorage
     if (isLoading) return;
 
-    // If no cookie, redirect to login
+    // If no cookie at all, redirect to login
     if (!cookie) {
       router.replace('/login');
       return;
     }
 
-    // Check authentication with server
-    const checkAuth = async () => {
-      if (isChecking) return;
+    // If we have a cookie, verify it's still valid with the server
+    if (cookie && !isChecking) {
       setIsChecking(true);
-      
-      try {
-        const response = await getCurrentUserAction();
-        if(response.Status !== 201){
+      const verifyAuth = async () => {
+        try {
+          const response = await getCurrentUserAction();
+          if (response.Status === 201 && response.Object) {
+            // Auth is valid - restore user if missing
+            if (!user) {
+              setUser({ 
+                UserID: 0, 
+                UserName: response.Object, 
+                UserType: '', 
+                UserEmail: '', 
+                Image: 'admin', 
+                FullName: response.Object, 
+                IsAuthenticated: true 
+              });
+            }
+          } else {
+            // Cookie is invalid, clear everything
+            logout();
+            router.replace('/login');
+          }
+        } catch (error) {
+          console.error('Auth verification failed:', error);
           logout();
           router.replace('/login');
+        } finally {
+          setIsChecking(false);
         }
-      } catch (error) {
-        console.error('Auth check failed:', error);
-        logout();
-        router.replace('/login');
-      } finally {
-        setIsChecking(false);
-      }
-    };
+      };
+      verifyAuth();
+    }
+  }, [cookie, user, isLoading, router, logout, setUser, isChecking]);
 
-    checkAuth();
-  }, [cookie, isLoading, router, logout, isChecking]);
+  // Show loading state while checking authentication
+  if (isLoading || isChecking) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-gray-900 border-r-transparent"></div>
+          <p className="mt-4 text-sm text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render content if not authenticated
+  if (!cookie) {
+    return null;
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">

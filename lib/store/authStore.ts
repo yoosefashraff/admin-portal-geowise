@@ -67,14 +67,26 @@ export const useAuthStore = create<AuthState>()(
 
       checkAuth: async () => {
         try {
-          const user = await getCurrentUserAction();
+          const response = await getCurrentUserAction();
           
-          set({
-            isAuthenticated: true,
-            isLoading: false,
-          });
+          if (response.Status === 201 && response.Object) {
+            // Update user if we have valid auth
+            set({
+              isAuthenticated: true,
+              isLoading: false,
+            });
+          } else {
+            // Invalid auth, clear everything
+            set({
+              cookie: null,
+              user: null,
+              isAuthenticated: false,
+              isLoading: false,
+            });
+          }
         } catch (error) {
           set({
+            cookie: null,
             user: null,
             isAuthenticated: false,
             isLoading: false,

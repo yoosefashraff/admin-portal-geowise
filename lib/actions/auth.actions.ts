@@ -66,6 +66,9 @@ export async function loginAction(data: LoginRequest) {
     try {
       const cookieStore = await cookies();
 
+      // Set cookie with 30 days expiration for persistent login
+      const maxAge = 60 * 60 * 24 * 30; // 30 days in seconds
+
       cookieStore.set({
         name: "xyzCompAuthorize",
         value: json.Cookie,
@@ -73,6 +76,7 @@ export async function loginAction(data: LoginRequest) {
         httpOnly: false,
         sameSite: "lax",
         secure: false,
+        maxAge: maxAge,
       });
     } catch (cookieError: any) {
       // Still return the response even if cookie setting fails
