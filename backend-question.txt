@@ -1,1 +1,0 @@
-ApprovedUserCredits/List endpoint returns database error: "Error retrieving ApprovedUserCredits: An error occurred while executing the command definition. See the inner exception for details." Cookie is being sent correctly. Can you check the database query/connection?
