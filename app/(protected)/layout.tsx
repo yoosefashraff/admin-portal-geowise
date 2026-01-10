@@ -2,7 +2,7 @@
 
 import { DashboardSidebar } from '@/components/layout/DashboardSidebar';
 import {useAuthStore} from "@/lib/store/authStore";
-import {useEffect, useState} from "react";
+import {useEffect, useState, useRef} from "react";
 import { useRouter } from 'next/navigation';
 import { getCurrentUserAction } from '@/lib/actions/auth.actions';
 import { cn } from '@/lib/utils';
@@ -10,9 +10,10 @@ import { cn } from '@/lib/utils';
 export default function ProtectedLayout({children}: {children: React.ReactNode;}) {
 
   const { cookie, user, isAuthenticated, isLoading } = useAuthStore();
-  const { logout, checkAuth, setUser } = useAuthStore();
+  const { logout, setUser } = useAuthStore();
   const router = useRouter();
   const [isChecking, setIsChecking] = useState(false);
+  const hasCheckedAuth = useRef(false);
 
   useEffect(() => {
     // Wait for Zustand store to rehydrate from localStorage
@@ -24,12 +25,30 @@ export default function ProtectedLayout({children}: {children: React.ReactNode;}
       return;
     }
 
-    // If we have a cookie, verify it's still valid with the server
-    if (cookie && !isChecking) {
+    // If we have both cookie and user (just logged in), skip server check
+    // The cookie was just set and user is already in store
+    if (cookie && user && isAuthenticated) {
+      // User is already authenticated, no need to check
+      return;
+    }
+
+    // Only check auth once per cookie change
+    if (cookie && !isChecking && !hasCheckedAuth.current) {
+      hasCheckedAuth.current = true;
       setIsChecking(true);
+      
+      // Add timeout to prevent infinite loading
+      const timeoutId = setTimeout(() => {
+        console.warn('Auth check timeout');
+        setIsChecking(false);
+        hasCheckedAuth.current = false;
+      }, 10000); // 10 second timeout
+
       const verifyAuth = async () => {
         try {
           const response = await getCurrentUserAction();
+          clearTimeout(timeoutId);
+          
           if (response.Status === 201 && response.Object) {
             // Auth is valid - restore user if missing
             if (!user) {
@@ -45,11 +64,14 @@ export default function ProtectedLayout({children}: {children: React.ReactNode;}
             }
           } else {
             // Cookie is invalid, clear everything
+            hasCheckedAuth.current = false;
             logout();
             router.replace('/login');
           }
         } catch (error) {
           console.error('Auth verification failed:', error);
+          clearTimeout(timeoutId);
+          hasCheckedAuth.current = false;
           logout();
           router.replace('/login');
         } finally {
@@ -58,10 +80,15 @@ export default function ProtectedLayout({children}: {children: React.ReactNode;}
       };
       verifyAuth();
     }
-  }, [cookie, user, isLoading, router, logout, setUser, isChecking]);
+  }, [cookie, user, isLoading, isAuthenticated, router, logout, setUser, isChecking]);
 
-  // Show loading state while checking authentication
-  if (isLoading || isChecking) {
+  // Reset check flag when cookie changes
+  useEffect(() => {
+    hasCheckedAuth.current = false;
+  }, [cookie]);
+
+  // Show loading state only while checking authentication (not if already authenticated)
+  if (isLoading || (isChecking && !isAuthenticated)) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -73,7 +100,7 @@ export default function ProtectedLayout({children}: {children: React.ReactNode;}
   }
 
   // Don't render content if not authenticated
-  if (!cookie) {
+  if (!cookie || (!user && !isChecking)) {
     return null;
   }
 

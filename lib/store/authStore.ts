@@ -42,11 +42,14 @@ export const useAuthStore = create<AuthState>()(
             cookie: response.Cookie,
             user: response.UserDetails,
             isAuthenticated: true,
+            isLoading: false, // Ensure loading is false after successful login
           });
         } catch (error) {
           set({
+            cookie: null,
             user: null,
             isAuthenticated: false,
+            isLoading: false,
           });
           throw error;
         }
