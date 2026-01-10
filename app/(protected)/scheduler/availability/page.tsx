@@ -81,27 +81,27 @@ export default function AvailabilityPage() {
             <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
               Select Provider:
             </label>
-            <Select
-              value={selectedProviderId}
-              onValueChange={setSelectedProviderId}
-              disabled={providers.length === 0}
-            >
-              <SelectTrigger className="w-full max-w-md h-11">
-                <SelectValue placeholder="Select a provider">
-                  {selectedProvider ? selectedProvider.ProviderName : 'Select a provider'}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {providers.map((provider) => (
-                  <SelectItem
-                    key={provider.ProviderId}
-                    value={provider.ProviderId.toString()}
-                  >
-                    {provider.ProviderName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <Select
+                value={selectedProviderId}
+                onValueChange={setSelectedProviderId}
+                disabled={providers.length === 0}
+              >
+                <SelectTrigger className="w-full max-w-md h-11">
+                  <SelectValue placeholder="Select a provider">
+                    {selectedProvider ? selectedProvider.ProviderName : 'Select a provider'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {providers.map((provider) => (
+                    <SelectItem
+                      key={provider.ProviderId}
+                      value={provider.ProviderId.toString()}
+                    >
+                      {provider.ProviderName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
           </div>
         </CardContent>
       </Card>

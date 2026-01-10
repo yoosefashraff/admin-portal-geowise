@@ -7,6 +7,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, Di
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface CompanyServiceItemProps {
@@ -18,16 +19,31 @@ interface CompanyServiceItemProps {
 
 export default function CompanyServiceItem({ service, index, dataLength, handleDeleteItem }: CompanyServiceItemProps) {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+    const router = useRouter()
+
+    const handleRowClick = (e: React.MouseEvent<HTMLTableRowElement>) => {
+        // Don't navigate if clicking on the dropdown menu or its trigger
+        const target = e.target as HTMLElement
+        if (
+            target.closest('[role="menuitem"]') ||
+            target.closest('button') ||
+            target.closest('[data-radix-popper-content-wrapper]')
+        ) {
+            return
+        }
+        router.push(`/services/${service.Id}/edit`)
+    }
 
     return (
         <tr
             key={service.Id}
-            className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${
+            onClick={handleRowClick}
+            className={`border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer ${
                 index === dataLength - 1 ? 'border-b-0' : ''
             }`}
         >
             <td className="py-4 px-6 text-sm font-medium text-gray-900">
-                <Link href={`/services/${service.Id}/edit`} >{service.ServiceName}</Link>
+                {service.ServiceName}
             </td>
             <td className="py-4 px-6 text-sm text-gray-500">
                 {service?.CurrencyCode} {service.Price}
@@ -88,10 +104,13 @@ export default function CompanyServiceItem({ service, index, dataLength, handleD
                 )}
             </div>
             </td>
-            <td className="py-4 px-6">
+            <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
 							<DropdownMenu modal={false}>
 									<DropdownMenuTrigger asChild>
-									<button className="text-gray-500 hover:text-gray-600 transition-colors cursor-pointer">
+									<button 
+										className="text-gray-500 hover:text-gray-600 transition-colors cursor-pointer"
+										onClick={(e) => e.stopPropagation()}
+									>
 											<MoreVertical className="w-5 h-5" />
 									</button>
 									</DropdownMenuTrigger>

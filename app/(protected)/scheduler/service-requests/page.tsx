@@ -15,6 +15,7 @@ import { listApprovedUserCredits } from '@/lib/actions/approvedUserCredits.actio
 import { useAuthStore } from '@/lib/store/authStore'
 import { toast } from 'sonner'
 import { ServiceRequestsSkeleton } from '@/components/skeleton/ServiceRequestsSkeleton'
+import { CSVImportDialog } from '@/components/service-requests/CSVImportDialog'
 
 export default function ServiceRequestsPage() {
   const router = useRouter()
@@ -31,6 +32,7 @@ export default function ServiceRequestsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const itemsPerPage = 10
 
   // Fetch service requests from API
@@ -306,6 +308,88 @@ export default function ServiceRequestsPage() {
     }
   }
 
+  // Handle CSV import
+  const handleCSVImport = (importedRequests: ServiceRequest[]) => {
+    // Add imported requests to the existing requests
+    setRequests((prev) => [...importedRequests, ...prev])
+    toast.success(`Successfully imported ${importedRequests.length} service request${importedRequests.length !== 1 ? 's' : ''}`)
+  }
+
+  // Handle CSV export
+  const handleCSVExport = () => {
+    // Export currently filtered requests (what's visible in the table)
+    const dataToExport = filteredRequests
+
+    if (dataToExport.length === 0) {
+      toast.error('No service requests to export')
+      return
+    }
+
+    // Create CSV headers
+    const headers = [
+      'Name',
+      'Phone',
+      'Service',
+      'Address',
+      'Approved Credits',
+      'Used Credits',
+      'Remaining Credits',
+      'Status',
+      'Preferred Staff',
+      'Preferred Days',
+    ]
+
+    // Create CSV rows
+    const csvRows = [
+      headers,
+      ...dataToExport.map((request) => [
+        request.name || '',
+        request.phone || '',
+        request.service || '',
+        request.address || '',
+        String(request.credits.approved || 0),
+        String(request.credits.used || 0),
+        String(request.credits.remaining || 0),
+        request.status || 'Draft',
+        (request.preferredStaff || []).join(', '),
+        (request.preferredDays || []).join(', '),
+      ]),
+    ]
+
+    // Convert to CSV format with proper escaping
+    const csvContent = csvRows
+      .map((row) =>
+        row
+          .map((cell) => {
+            // Escape quotes and wrap in quotes if contains comma, newline, or quote
+            const cellStr = String(cell).replace(/"/g, '""')
+            if (cellStr.includes(',') || cellStr.includes('\n') || cellStr.includes('"')) {
+              return `"${cellStr}"`
+            }
+            return cellStr
+          })
+          .join(',')
+      )
+      .join('\n')
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().split('T')[0]
+    link.setAttribute('download', `service-requests-${timestamp}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    toast.success(`Exported ${dataToExport.length} service request${dataToExport.length !== 1 ? 's' : ''} to CSV`)
+  }
+
   return (
     <div className='max-w-7xl mx-auto py-8 px-6'>
       {/* Header with Button aligned */}
@@ -338,11 +422,19 @@ export default function ServiceRequestsPage() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            className="flex items-center gap-2"
+            onClick={() => setIsImportDialogOpen(true)}
+          >
             <Upload className="w-4 h-4" />
             Import
           </Button>
-          <Button variant="outline" className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            className="flex items-center gap-2"
+            onClick={handleCSVExport}
+          >
             <Download className="w-4 h-4" />
             Export
           </Button>
@@ -513,6 +605,13 @@ export default function ServiceRequestsPage() {
           </Button>
         </div>
       )}
+
+      {/* CSV Import Dialog */}
+      <CSVImportDialog
+        open={isImportDialogOpen}
+        onOpenChange={setIsImportDialogOpen}
+        onImport={handleCSVImport}
+      />
     </div>
   )
 }
