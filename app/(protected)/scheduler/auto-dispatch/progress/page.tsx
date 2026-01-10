@@ -6,6 +6,7 @@ import { CheckCircle2, XCircle, Loader2, ArrowLeft, Download, FileSpreadsheet } 
 import { DashboardHeader } from '@/components/layout/DashboardHeader';
 import type { DispatchProgress, DispatchProgressItem, DispatchProgressStatus } from '@/lib/types/dispatchLog.types';
 import type { ServiceRequest } from '@/lib/types/serviceRequest.types';
+import { updateApprovedUserCredit } from '@/lib/actions/approvedUserCredits.actions';
 
 export default function AutoDispatchProgressPage() {
   const router = useRouter();
@@ -13,11 +14,14 @@ export default function AutoDispatchProgressPage() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Simulate dispatch progress with delays
-  const simulateDispatchProgress = useCallback((initialProgress: DispatchProgress, services: ServiceRequest[]) => {
+  const simulateDispatchProgress = useCallback(async (initialProgress: DispatchProgress, services: ServiceRequest[]) => {
 
     // Process each item with delays
     initialProgress.items.forEach((item, index) => {
-      setTimeout(() => {
+      setTimeout(async () => {
+        // Get the service for this item
+        const service = services[index];
+        
         // Mock behavior: first service (index 0) completes, second (index 1) fails, rest succeed
         const isFirst = index === 0;
         const isSecond = index === 1;
@@ -47,6 +51,31 @@ export default function AutoDispatchProgressPage() {
             assignedProvider: `Provider ${index + 1}`,
             completedAt: new Date().toISOString(),
           };
+        }
+
+        // Update credits when service is successfully dispatched
+        if (updatedItem.status === 'Completed' && service?.userId && service?.serviceId && service?.approvedUserCreditId) {
+          try {
+            // Deduct 1 credit per service (or use actual credit deduction amount from service)
+            const creditDeduction = 1; // TODO: Get actual credit deduction from service request
+            
+            await updateApprovedUserCredit({
+              Id: service.approvedUserCreditId,
+              UserId: service.userId,
+              ServiceId: service.serviceId,
+              ApprovedCredits: service.credits.approved,
+              UsedCredits: (service.credits.used || 0) + creditDeduction,
+              RemainingCredits: (service.credits.remaining || 0) - creditDeduction,
+              StartDate: service.credits.approved ? new Date().toISOString() : new Date().toISOString(), // Use actual StartDate from credit if available
+              EndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // Use actual EndDate from credit if available
+              RecurringPeriod: 1, // Use actual RecurringPeriod from credit if available
+              IsActive: true,
+            });
+            console.log(`Credits updated for service ${service.id}`);
+          } catch (error) {
+            console.error('Failed to update credits after dispatch:', error);
+            // Don't fail the dispatch if credit update fails, just log it
+          }
         }
 
         setProgress((prev) => {
@@ -108,6 +137,7 @@ export default function AutoDispatchProgressPage() {
         status: 'Approved' as const,
         userId: 1000 + index,
         serviceId: 2000 + index,
+        approvedUserCreditId: 3000 + index, // Mock credit ID for testing
       }));
 
       // Create initial progress state

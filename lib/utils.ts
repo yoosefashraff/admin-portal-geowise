@@ -8,6 +8,25 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Parse .NET JSON date format: /Date(1767286230733)/
+ * Returns a Date object or null if parsing fails
+ */
+export function parseDotNetDate(dateString: string): Date | null {
+  if (!dateString) return null;
+  
+  // Handle .NET JSON date format: /Date(milliseconds)/
+  const dotNetDateMatch = dateString.match(/\/Date\((-?\d+)\)\//);
+  if (dotNetDateMatch) {
+    const milliseconds = parseInt(dotNetDateMatch[1], 10);
+    return new Date(milliseconds);
+  }
+  
+  // Try standard ISO format or other formats
+  const date = new Date(dateString);
+  return isNaN(date.getTime()) ? null : date;
+}
+
 export function groupDatesByMonthArray(dates: string[]): MonthGroup[] {
   const grouped: Record<string, MonthGroup> = {};
   
@@ -78,6 +97,35 @@ export function getCallingCode(countryCode: string){
 
 export function allCallingCountries() {
   return Object.keys(countryCallingCodes);
+}
+
+// Country code to country name mapping
+const countryNames: Record<string, string> = {
+  'US': 'United States', 'GB': 'United Kingdom', 'CA': 'Canada', 'AU': 'Australia',
+  'DE': 'Germany', 'FR': 'France', 'IT': 'Italy', 'ES': 'Spain', 'NL': 'Netherlands',
+  'BE': 'Belgium', 'CH': 'Switzerland', 'AT': 'Austria', 'SE': 'Sweden', 'NO': 'Norway',
+  'DK': 'Denmark', 'FI': 'Finland', 'PL': 'Poland', 'PT': 'Portugal', 'GR': 'Greece',
+  'IE': 'Ireland', 'CZ': 'Czech Republic', 'HU': 'Hungary', 'RO': 'Romania',
+  'SA': 'Saudi Arabia', 'AE': 'UAE', 'KW': 'Kuwait', 'QA': 'Qatar', 'BH': 'Bahrain',
+  'OM': 'Oman', 'JO': 'Jordan', 'LB': 'Lebanon', 'EG': 'Egypt', 'MA': 'Morocco',
+  'DZ': 'Algeria', 'TN': 'Tunisia', 'ZA': 'South Africa', 'NG': 'Nigeria', 'KE': 'Kenya',
+  'GH': 'Ghana', 'ET': 'Ethiopia', 'TZ': 'Tanzania', 'UG': 'Uganda', 'RW': 'Rwanda',
+  'IN': 'India', 'PK': 'Pakistan', 'BD': 'Bangladesh', 'LK': 'Sri Lanka', 'NP': 'Nepal',
+  'CN': 'China', 'JP': 'Japan', 'KR': 'South Korea', 'TW': 'Taiwan', 'HK': 'Hong Kong',
+  'SG': 'Singapore', 'MY': 'Malaysia', 'TH': 'Thailand', 'ID': 'Indonesia', 'PH': 'Philippines',
+  'VN': 'Vietnam', 'MM': 'Myanmar', 'KH': 'Cambodia', 'LA': 'Laos', 'BN': 'Brunei',
+  'MX': 'Mexico', 'BR': 'Brazil', 'AR': 'Argentina', 'CL': 'Chile', 'CO': 'Colombia',
+  'PE': 'Peru', 'VE': 'Venezuela', 'EC': 'Ecuador', 'UY': 'Uruguay', 'PY': 'Paraguay',
+  'BO': 'Bolivia', 'CR': 'Costa Rica', 'PA': 'Panama', 'GT': 'Guatemala', 'HN': 'Honduras',
+  'NI': 'Nicaragua', 'SV': 'El Salvador', 'DO': 'Dominican Republic', 'CU': 'Cuba',
+  'JM': 'Jamaica', 'TT': 'Trinidad and Tobago', 'NZ': 'New Zealand', 'FJ': 'Fiji',
+  'PG': 'Papua New Guinea', 'RU': 'Russia', 'UA': 'Ukraine', 'KZ': 'Kazakhstan',
+  'BY': 'Belarus', 'UZ': 'Uzbekistan', 'GE': 'Georgia', 'AM': 'Armenia', 'AZ': 'Azerbaijan',
+  'TR': 'Turkey', 'IL': 'Israel', 'IR': 'Iran', 'IQ': 'Iraq', 'AF': 'Afghanistan'
+};
+
+export function getCountryName(countryCode: string): string {
+  return countryNames[countryCode] || countryCode;
 }
 
 export function getAllCurrencyCodes() {

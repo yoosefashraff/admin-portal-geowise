@@ -36,174 +36,175 @@ export default function ServiceRequestsPage() {
   const itemsPerPage = 10
 
   // Fetch service requests from API
-  useEffect(() => {
-    const loadServiceRequests = async () => {
-      if (!user) return
+  const loadServiceRequests = async () => {
+    if (!user) return
+    
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await fetchServiceRequests(
+        undefined,
+        undefined,
+        false,
+        user.UserID
+      )
       
-      setIsLoading(true)
-      setError(null)
-      try {
-        const response = await fetchServiceRequests(
-          undefined,
-          undefined,
-          false,
-          user.UserID
-        )
-        
-        if (response.Status !== 201) {
-          // Check if it's an authentication error
-          if (response.Status === 401 || response.Status === 403) {
-            toast.error('Authentication failed. Please log in again.')
-            router.push('/login')
-            return
-          }
-          throw new Error(response.Message || 'Failed to fetch service requests')
+      if (response.Status !== 201) {
+        // Check if it's an authentication error
+        if (response.Status === 401 || response.Status === 403) {
+          toast.error('Authentication failed. Please log in again.')
+          router.push('/login')
+          return
         }
-
-        // Fetch user credits to merge with service requests
-        let creditsMap = new Map<number, { approved: number; used: number; remaining: number; creditId?: number }>()
-        try {
-          const creditsResponse = await listApprovedUserCredits({ IsActive: true })
-          if (creditsResponse.Status === 201 && creditsResponse.data && Array.isArray(creditsResponse.data)) {
-            creditsResponse.data.forEach((credit) => {
-              if (credit.UserId && credit.ServiceId) {
-                // Use UserId as key to map credits to bookings
-                creditsMap.set(credit.UserId, {
-                  approved: credit.ApprovedCredits,
-                  used: credit.UsedCredits || 0,
-                  remaining: credit.RemainingCredits || 0,
-                  creditId: credit.Id,
-                })
-              }
-            })
-          }
-        } catch (creditsError) {
-          // Only log if it's not a JSON parsing error (which is expected if API returns HTML)
-          if (creditsError instanceof SyntaxError && creditsError.message?.includes('JSON')) {
-            console.warn('API returned HTML instead of JSON (may need authentication or correct endpoint):', creditsError.message)
-          } else {
-            console.warn('Failed to fetch credits, continuing without credit data:', creditsError)
-          }
-        }
-
-        // Map API response to ServiceRequest format
-        // API returns Barber[] with Callouts[] nested inside
-        const barbers = response.Object || []
-        
-        // Extract all callouts from all barbers and flatten into a single array
-        const allCallouts: any[] = []
-        barbers.forEach((barber: any) => {
-          if (barber.Callouts && Array.isArray(barber.Callouts)) {
-            barber.Callouts.forEach((callout: any) => {
-              // Add barber info to each callout for reference
-              allCallouts.push({
-                ...callout,
-                ProviderId: barber.UserID,
-                ProviderName: barber.FullName || barber.UserName,
-              })
-            })
-          }
-        })
-        
-        // Log first callout to debug field names
-        if (allCallouts.length > 0) {
-          console.log('Sample callout from API:', allCallouts[0])
-          console.log('Available callout fields:', Object.keys(allCallouts[0]))
-        }
-        
-        const mappedRequests: ServiceRequest[] = allCallouts.map((callout: any, index: number) => {
-          // Map Callout fields to ServiceRequest format
-          // Callout has: Id, BookingDate, TimeSlot, Customer, ServiceName, Address, BlockHourId
-          const calloutId = callout.Id || callout.id || callout.ID || `callout-${index}`
-          const customerName = callout.Customer || callout.customer || callout.CustomerName || callout.customerName || ''
-          const serviceName = callout.ServiceName || callout.serviceName || callout.Service || callout.service || ''
-          const address = callout.Address || callout.address || ''
-          const bookingDate = callout.BookingDate || callout.bookingDate || ''
-          const timeSlot = callout.TimeSlot || callout.timeSlot || ''
-          
-          // Try to get phone number from callout (might not be in Callout, might need separate lookup)
-          const phone = callout.PhoneNumber || callout.phoneNumber || callout.Phone || callout.phone || callout.CustomerPhone || callout.customerPhone || ''
-          
-          // Provider info from barber
-          const providerId = callout.ProviderId
-          const providerName = callout.ProviderName
-          
-          // For credits, we might need to use ProviderId or calloutId
-          // Since credits are mapped by UserId, and callouts might not have direct userId,
-          // we'll use ProviderId as a fallback
-          const userId = callout.UserId || callout.userId || callout.UserID || providerId
-          const creditInfo = userId && creditsMap.has(userId) 
-            ? creditsMap.get(userId)! 
-            : { approved: 0, used: 0, remaining: 0 }
-
-          // Determine status - Callouts are typically "Approved" or "Confirmed" when they appear
-          // If there's a status field, use it; otherwise default to "Approved" for callouts
-          const statusStr = String(callout.Status || callout.status || 'Approved').trim()
-          let normalizedStatus: 'Approved' | 'Pending' | 'Draft' | 'Rejected' = 'Approved'
-          if (statusStr) {
-            const statusLower = statusStr.toLowerCase()
-            if (statusLower === 'approved' || statusLower === 'confirmed') {
-              normalizedStatus = 'Approved'
-            } else if (statusLower === 'pending') {
-              normalizedStatus = 'Pending'
-            } else if (statusLower === 'rejected' || statusLower === 'cancelled') {
-              normalizedStatus = 'Rejected'
-            } else {
-              normalizedStatus = 'Draft'
-            }
-          }
-
-          return {
-            id: String(calloutId),
-            name: customerName || 'Unknown Customer',
-            phone: phone || '',
-            service: serviceName || 'Unknown Service',
-            address: address || '',
-            credits: {
-              approved: creditInfo.approved,
-              used: creditInfo.used,
-              remaining: creditInfo.remaining,
-            },
-            preferredStaff: providerName ? [providerName] : (callout.PreferredStaff || callout.preferredStaff || []),
-            preferredDays: callout.PreferredDays || callout.preferredDays || [],
-            status: normalizedStatus,
-            userId: userId,
-            serviceId: callout.ServiceId || callout.serviceId || undefined,
-            approvedUserCreditId: creditInfo.creditId,
-          }
-        })
-
-        // Merge with pending requests from sessionStorage (newly created)
-        const pendingRequests = sessionStorage.getItem('pendingServiceRequests');
-        let allRequests = mappedRequests;
-        
-        if (pendingRequests) {
-          try {
-            const pending = JSON.parse(pendingRequests);
-            if (Array.isArray(pending) && pending.length > 0) {
-              // Merge pending requests with API data (pending first, then API data)
-              allRequests = [...pending, ...mappedRequests];
-              // Clear sessionStorage after merging
-              sessionStorage.removeItem('pendingServiceRequests');
-              toast.success(`${pending.length} new service request${pending.length !== 1 ? 's' : ''} added`);
-            }
-          } catch (error) {
-            console.error('Error parsing pending service requests:', error);
-            sessionStorage.removeItem('pendingServiceRequests');
-          }
-        }
-
-        // Set requests (empty array if no data)
-        setRequests(allRequests)
-      } catch (err) {
-        console.error('Failed to load service requests:', err)
-        setError(err instanceof Error ? err.message : 'Failed to load service requests')
-        setRequests([]) // Set to empty array on error
-      } finally {
-        setIsLoading(false)
+        throw new Error(response.Message || 'Failed to fetch service requests')
       }
-    }
 
+      // Fetch user credits to merge with service requests
+      let creditsMap = new Map<number, { approved: number; used: number; remaining: number; creditId?: number }>()
+      try {
+        const creditsResponse = await listApprovedUserCredits({ IsActive: true })
+        if (creditsResponse.Status === 201 && creditsResponse.data && Array.isArray(creditsResponse.data)) {
+          creditsResponse.data.forEach((credit) => {
+            if (credit.UserId && credit.ServiceId) {
+              // Use UserId as key to map credits to bookings
+              creditsMap.set(credit.UserId, {
+                approved: credit.ApprovedCredits,
+                used: credit.UsedCredits || 0,
+                remaining: credit.RemainingCredits || 0,
+                creditId: credit.Id,
+              })
+            }
+          })
+        }
+      } catch (creditsError) {
+        // Only log if it's not a JSON parsing error (which is expected if API returns HTML)
+        if (creditsError instanceof SyntaxError && creditsError.message?.includes('JSON')) {
+          console.warn('API returned HTML instead of JSON (may need authentication or correct endpoint):', creditsError.message)
+        } else {
+          console.warn('Failed to fetch credits, continuing without credit data:', creditsError)
+        }
+      }
+
+      // Map API response to ServiceRequest format
+      // API returns Barber[] with Callouts[] nested inside
+      const barbers = response.Object || []
+      
+      // Extract all callouts from all barbers and flatten into a single array
+      const allCallouts: any[] = []
+      barbers.forEach((barber: any) => {
+        if (barber.Callouts && Array.isArray(barber.Callouts)) {
+          barber.Callouts.forEach((callout: any) => {
+            // Add barber info to each callout for reference
+            allCallouts.push({
+              ...callout,
+              ProviderId: barber.UserID,
+              ProviderName: barber.FullName || barber.UserName,
+            })
+          })
+        }
+      })
+      
+      // Log first callout to debug field names
+      if (allCallouts.length > 0) {
+        console.log('Sample callout from API:', allCallouts[0])
+        console.log('Available callout fields:', Object.keys(allCallouts[0]))
+      }
+      
+      const mappedRequests: ServiceRequest[] = allCallouts.map((callout: any, index: number) => {
+        // Map Callout fields to ServiceRequest format
+        // Callout has: Id, BookingDate, TimeSlot, Customer, ServiceName, Address, BlockHourId
+        const calloutId = callout.Id || callout.id || callout.ID || `callout-${index}`
+        const customerName = callout.Customer || callout.customer || callout.CustomerName || callout.customerName || ''
+        const serviceName = callout.ServiceName || callout.serviceName || callout.Service || callout.service || ''
+        const address = callout.Address || callout.address || ''
+        const bookingDate = callout.BookingDate || callout.bookingDate || ''
+        const timeSlot = callout.TimeSlot || callout.timeSlot || ''
+        
+        // Try to get phone number from callout (might not be in Callout, might need separate lookup)
+        const phone = callout.PhoneNumber || callout.phoneNumber || callout.Phone || callout.phone || callout.CustomerPhone || callout.customerPhone || ''
+        
+        // Provider info from barber
+        const providerId = callout.ProviderId
+        const providerName = callout.ProviderName
+        
+        // For credits, we might need to use ProviderId or calloutId
+        // Since credits are mapped by UserId, and callouts might not have direct userId,
+        // we'll use ProviderId as a fallback
+        const userId = callout.UserId || callout.userId || callout.UserID || providerId
+        const creditInfo = userId && creditsMap.has(userId) 
+          ? creditsMap.get(userId)! 
+          : { approved: 0, used: 0, remaining: 0 }
+
+        // Determine status - Callouts are typically "Approved" or "Confirmed" when they appear
+        // If there's a status field, use it; otherwise default to "Approved" for callouts
+        const statusStr = String(callout.Status || callout.status || 'Approved').trim()
+        let normalizedStatus: 'Approved' | 'Pending' | 'Draft' | 'Rejected' = 'Approved'
+        if (statusStr) {
+          const statusLower = statusStr.toLowerCase()
+          if (statusLower === 'approved' || statusLower === 'confirmed') {
+            normalizedStatus = 'Approved'
+          } else if (statusLower === 'pending') {
+            normalizedStatus = 'Pending'
+          } else if (statusLower === 'rejected' || statusLower === 'cancelled') {
+            normalizedStatus = 'Rejected'
+          } else {
+            normalizedStatus = 'Draft'
+          }
+        }
+
+        return {
+          id: String(calloutId),
+          name: customerName || 'Unknown Customer',
+          phone: phone || '',
+          service: serviceName || 'Unknown Service',
+          address: address || '',
+          credits: {
+            approved: creditInfo.approved,
+            used: creditInfo.used,
+            remaining: creditInfo.remaining,
+          },
+          preferredStaff: providerName ? [providerName] : (callout.PreferredStaff || callout.preferredStaff || []),
+          preferredDays: callout.PreferredDays || callout.preferredDays || [],
+          status: normalizedStatus,
+          userId: userId,
+          serviceId: callout.ServiceId || callout.serviceId || undefined,
+          approvedUserCreditId: creditInfo.creditId,
+        }
+      })
+
+      // Merge with pending requests from sessionStorage (newly created)
+      const pendingRequests = sessionStorage.getItem('pendingServiceRequests');
+      let allRequests = mappedRequests;
+      
+      if (pendingRequests) {
+        try {
+          const pending = JSON.parse(pendingRequests);
+          if (Array.isArray(pending) && pending.length > 0) {
+            // Merge pending requests with API data (pending first, then API data)
+            allRequests = [...pending, ...mappedRequests];
+            // Clear sessionStorage after merging
+            sessionStorage.removeItem('pendingServiceRequests');
+            toast.success(`${pending.length} new service request${pending.length !== 1 ? 's' : ''} added`);
+          }
+        } catch (error) {
+          console.error('Error parsing pending service requests:', error);
+          sessionStorage.removeItem('pendingServiceRequests');
+        }
+      }
+
+      // Set requests (empty array if no data)
+      setRequests(allRequests)
+    } catch (err) {
+      console.error('Failed to load service requests:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load service requests')
+      setRequests([]) // Set to empty array on error
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Fetch service requests on mount and when user changes
+  useEffect(() => {
     loadServiceRequests()
   }, [user])
 
@@ -386,11 +387,10 @@ export default function ServiceRequestsPage() {
     }
   }
 
-  // Handle CSV import
-  const handleCSVImport = (importedRequests: ServiceRequest[]) => {
-    // Add imported requests to the existing requests
-    setRequests((prev) => [...importedRequests, ...prev])
-    toast.success(`Successfully imported ${importedRequests.length} service request${importedRequests.length !== 1 ? 's' : ''}`)
+  // Handle CSV import - reload service requests from API
+  const handleCSVImport = () => {
+    // Reload service requests from API after successful import
+    loadServiceRequests()
   }
 
   // Handle CSV export
@@ -480,7 +480,7 @@ export default function ServiceRequestsPage() {
           onClick={() => {
             router.push('/scheduler/service-requests/new')
           }}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           New Service Request

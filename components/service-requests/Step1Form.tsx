@@ -8,11 +8,13 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getCallingCode, allCallingCountries } from '@/lib/utils';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { getCallingCode, allCallingCountries, getCountryName } from '@/lib/utils';
 import { Check, ChevronsUpDown, Search, CalendarIcon } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { Calendar } from '@/components/ui/calendar';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/lib/store/authStore';
@@ -41,6 +43,8 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [open, setOpen] = useState(false);
+  const [countryCodeOpen, setCountryCodeOpen] = useState(false);
+  const [countrySearchQuery, setCountrySearchQuery] = useState('');
 
   const form = useForm<z.infer<typeof step1Schema>>({
     resolver: zodResolver(step1Schema),
@@ -50,8 +54,8 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
       countryCode: initialData?.countryCode || 'US',
       location: initialData?.location || '',
       service: initialData?.service || '',
-      recurringPeriodValue: initialData?.recurringPeriod ? parseInt(initialData.recurringPeriod.split(' ')[1]) || 1 : 1,
-      recurringPeriodUnit: initialData?.recurringPeriod ? initialData.recurringPeriod.split(' ')[2] || 'days' : 'days',
+      recurringPeriodValue: initialData?.recurringPeriod ? parseInt(initialData.recurringPeriod.split(' ')[0]) || 1 : 1,
+      recurringPeriodUnit: initialData?.recurringPeriod ? initialData.recurringPeriod.split(' ')[1] || 'days' : 'days',
       expiryDate: initialData?.expiryDate || '',
     },
   });
@@ -80,6 +84,7 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
   }, [user]);
 
   const nameValue = form.watch('name');
+  const countryCodeValue = form.watch('countryCode');
   
   const filteredCustomers = useMemo(() => {
     const query = nameValue?.toLowerCase().trim() || '';
@@ -92,6 +97,53 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
     ).slice(0, 20);
   }, [customers, nameValue]);
 
+  // Auto-fill phone number when customer is selected
+  useEffect(() => {
+    if (nameValue && customers.length > 0) {
+      const matchedCustomer = customers.find(
+        (c) => c.Name?.toLowerCase().trim() === nameValue.toLowerCase().trim()
+      );
+      if (matchedCustomer) {
+        // Auto-fill phone number
+        if (matchedCustomer.Contact) {
+          form.setValue('phoneNumber', matchedCustomer.Contact);
+        }
+        // Auto-fill country code
+        if (matchedCustomer.CountryCode) {
+          form.setValue('countryCode', matchedCustomer.CountryCode);
+        }
+      }
+    }
+  }, [nameValue, customers, form]);
+
+  // Filter countries based on search query
+  const filteredCountries = useMemo(() => {
+    const query = countrySearchQuery.toLowerCase().trim();
+    const allCountries = allCallingCountries();
+    
+    if (!query) {
+      return allCountries;
+    }
+    
+    return allCountries.filter((code) => {
+      const countryName = getCountryName(code).toLowerCase();
+      const callingCode = getCallingCode(code).toLowerCase();
+      return (
+        code.toLowerCase().includes(query) ||
+        countryName.includes(query) ||
+        callingCode.includes(query)
+      );
+    });
+  }, [countrySearchQuery]);
+
+  // Get customers with phone numbers for the selected country code
+  const customersWithPhoneForCountry = useMemo(() => {
+    if (!countryCodeValue) return [];
+    return customers.filter(
+      (c) => c.CountryCode === countryCodeValue && c.Contact
+    );
+  }, [customers, countryCodeValue]);
+
   // Auto-open dropdown when user types and there are matches
   useEffect(() => {
     if (nameValue && filteredCustomers.length > 0) {
@@ -102,7 +154,9 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
 
   const onSubmit = (data: z.infer<typeof step1Schema>) => {
     // Combine recurringPeriodValue and recurringPeriodUnit into recurringPeriod string
-    const recurringPeriod = `Every ${data.recurringPeriodValue} ${data.recurringPeriodUnit}`;
+    // Format: "X days" or "X hours"
+    const unit = data.recurringPeriodUnit.toLowerCase();
+    const recurringPeriod = `${data.recurringPeriodValue} ${unit}`;
     onNext({
       ...data,
       recurringPeriod,
@@ -214,27 +268,107 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
                       control={form.control}
                       name="countryCode"
                       render={({ field: countryField }) => (
-                        <Select
-                          value={countryField.value || 'US'}
-                          onValueChange={(value) => {
-                            countryField.onChange(value);
-                            form.setValue('countryCode', value);
-                          }}
-                        >
-                          <SelectTrigger className="h-auto w-[50px] border-0 bg-transparent p-0 pr-2 mr-2 focus:ring-0 focus-visible:ring-0 shadow-none hover:bg-transparent data-[state=open]:bg-transparent">
-                            <SelectValue className="text-sm font-medium text-gray-700" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[300px] w-[200px]">
-                            {allCallingCountries().map((countryCode) => {
-                              const callingCode = getCallingCode(countryCode);
-                              return (
-                                <SelectItem key={countryCode} value={countryCode} className="text-sm cursor-pointer">
-                                  +{callingCode.replace('+', '')}
-                                </SelectItem>
-                              );
-                            })}
-                          </SelectContent>
-                        </Select>
+                        <Popover open={countryCodeOpen} onOpenChange={setCountryCodeOpen}>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className="h-auto w-auto min-w-[60px] border-0 bg-transparent p-0 pr-2 mr-2 focus:ring-0 focus-visible:ring-0 shadow-none hover:bg-transparent flex items-center gap-1.5 text-sm font-medium text-gray-700"
+                            >
+                              <span className="font-semibold">{countryField.value || 'US'}</span>
+                              <span className="text-gray-500">+{getCallingCode(countryField.value || 'US').replace('+', '')}</span>
+                              <ChevronsUpDown className="h-3 w-3 text-gray-400" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[300px] p-0" align="start">
+                            <Command>
+                              <CommandInput
+                                placeholder="Search country or code..."
+                                value={countrySearchQuery}
+                                onValueChange={setCountrySearchQuery}
+                              />
+                              <CommandList>
+                                <CommandEmpty>No country found.</CommandEmpty>
+                                <CommandGroup>
+                                  {filteredCountries.map((countryCode) => {
+                                    const callingCode = getCallingCode(countryCode);
+                                    const countryName = getCountryName(countryCode);
+                                    const countryCustomers = customers.filter(
+                                      (c) => c.CountryCode === countryCode && c.Contact
+                                    );
+                                    
+                                    return (
+                                      <CommandItem
+                                        key={countryCode}
+                                        value={`${countryCode} ${countryName} ${callingCode}`}
+                                        onSelect={() => {
+                                          countryField.onChange(countryCode);
+                                          form.setValue('countryCode', countryCode);
+                                          setCountryCodeOpen(false);
+                                          setCountrySearchQuery('');
+                                          
+                                          // Auto-fill phone if there's only one customer for this country
+                                          if (countryCustomers.length === 1 && !form.getValues('phoneNumber')) {
+                                            form.setValue('phoneNumber', countryCustomers[0].Contact || '');
+                                          }
+                                        }}
+                                        className="cursor-pointer"
+                                      >
+                                        <div className="flex items-center justify-between w-full gap-2">
+                                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                                            <span className="font-semibold text-gray-900 min-w-[35px]">
+                                              {countryCode}
+                                            </span>
+                                            <span className="text-gray-600 text-sm truncate">
+                                              {countryName}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-2 flex-shrink-0">
+                                            <span className="text-gray-500 text-sm">
+                                              +{callingCode.replace('+', '')}
+                                            </span>
+                                            {countryCustomers.length > 0 && (
+                                              <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                                                {countryCustomers.length}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                                {countryCodeValue && customersWithPhoneForCountry.length > 0 && (
+                                  <>
+                                    <CommandSeparator />
+                                    <CommandGroup heading="Phone numbers for this country">
+                                      {customersWithPhoneForCountry.slice(0, 5).map((customer) => (
+                                        <CommandItem
+                                          key={customer.Id}
+                                          onSelect={() => {
+                                            if (customer.Contact) {
+                                              form.setValue('phoneNumber', customer.Contact);
+                                            }
+                                            setCountryCodeOpen(false);
+                                          }}
+                                          className="cursor-pointer"
+                                        >
+                                          <div className="flex items-center gap-2 w-full">
+                                            <span className="text-sm text-gray-600 truncate">
+                                              {customer.Name}
+                                            </span>
+                                            <span className="text-sm text-gray-500 ml-auto">
+                                              {customer.Contact}
+                                            </span>
+                                          </div>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </>
+                                )}
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
                       )}
                     />
                     <input
@@ -313,7 +447,6 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
           </div>
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600 whitespace-nowrap">Every</span>
               <FormField
                 control={form.control}
                 name="recurringPeriodValue"
@@ -337,17 +470,25 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
                 control={form.control}
                 name="recurringPeriodUnit"
                 render={({ field }) => (
-                  <FormItem className="flex-1">
+                  <FormItem>
                     <FormControl>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <SelectTrigger className="h-[40px] w-full">
-                          <SelectValue placeholder="Select unit" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="days">days</SelectItem>
-                          <SelectItem value="Hours">Hours</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <Tabs
+                        value={field.value || 'days'}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          form.setValue('recurringPeriodUnit', value);
+                        }}
+                        className="w-full"
+                      >
+                        <TabsList className="h-[40px] w-full grid grid-cols-2">
+                          <TabsTrigger value="days" className="text-sm">
+                            days
+                          </TabsTrigger>
+                          <TabsTrigger value="hours" className="text-sm">
+                            hours
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
                     </FormControl>
                     <FormMessage />
                   </FormItem>

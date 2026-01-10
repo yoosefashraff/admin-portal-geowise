@@ -18,7 +18,8 @@ import {
   MapPin,
   Users,
   Clock,
-  ChevronDown
+  ChevronDown,
+  CreditCard
 } from 'lucide-react';
 import {Input} from '@/components/ui/input';
 import {Button} from '@/components/ui/button';
@@ -91,6 +92,11 @@ export function DashboardSidebar() {
           label: "Linked Users",
           icon: Users,
           href: "/linked-users",
+        },
+        {
+          label: "Approved Credits",
+          icon: CreditCard,
+          href: "/credits",
         },
       ],
     },

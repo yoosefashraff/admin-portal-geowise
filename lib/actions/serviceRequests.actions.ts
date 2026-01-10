@@ -56,3 +56,45 @@ export async function fetchDispatchLogs(
 
   return fetchBookings(params)
 }
+
+/**
+ * Import Service Requests from a file (bulk import)
+ * POST /ServiceRequests/import
+ * Content-Type: multipart/form-data
+ * Form-data key: file
+ * 
+ * @param formData - FormData object containing the file with key 'file'
+ *                   Client should create: formData.append('file', file)
+ */
+export async function importServiceRequests(
+  formData: FormData
+): Promise<{ Status: number; Message?: string; data?: { success: number; errors?: string[] } }> {
+  try {
+    const response: any = await serverAPI.post(
+      '/ServiceRequests/import',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      }
+    )
+    
+    if (response.Status === 201) {
+      return { 
+        Status: 201, 
+        Message: response.Message || 'Import completed successfully',
+        data: response.Object || response.data || response
+      }
+    } else {
+      return { 
+        Status: response.Status || 500, 
+        Message: response.Message || 'Import failed',
+        data: response.Object || response.data
+      }
+    }
+  } catch (err: any) {
+    const errorMessage = err.response?.statusText || err.message || 'Failed to import service requests'
+    return { Status: 500, Message: errorMessage }
+  }
+}

@@ -13,11 +13,13 @@ import {
 } from '@/components/ui/dialog';
 import { parseCSV, validateAndMapServiceRequests, readFileAsText, type CSVParseResult, type ServiceRequestCSVRow } from '@/lib/utils/csv-import';
 import type { ServiceRequest } from '@/lib/types/serviceRequest.types';
+import { importServiceRequests } from '@/lib/actions/serviceRequests.actions';
+import { toast } from 'sonner';
 
 interface CSVImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onImport: (requests: ServiceRequest[]) => void;
+  onImport: () => void; // Changed to callback to trigger reload instead of passing data
 }
 
 export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialogProps) {
@@ -57,28 +59,40 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
     }
   };
 
-  const handleImport = () => {
-    if (!parseResult || parseResult.data.length === 0) return;
+  const handleImport = async () => {
+    if (!parseResult || parseResult.data.length === 0 || !file) return;
 
-    // Convert CSV rows to ServiceRequest format
-    const serviceRequests: ServiceRequest[] = parseResult.data.map((row, index) => ({
-      id: `imported-${Date.now()}-${index}`,
-      name: row.name,
-      phone: row.phone,
-      service: row.service,
-      address: row.address,
-      credits: {
-        approved: row.approvedCredits || 0,
-        used: row.usedCredits || 0,
-        remaining: row.remainingCredits || (row.approvedCredits || 0) - (row.usedCredits || 0),
-      },
-      preferredStaff: row.preferredStaff || [],
-      preferredDays: row.preferredDays || [],
-      status: row.status || 'Draft',
-    }));
+    setIsProcessing(true);
+    try {
+      // Create FormData with CSV file
+      const formData = new FormData();
+      formData.append('file', file);
 
-    onImport(serviceRequests);
-    handleClose();
+      // Call backend import endpoint
+      const response = await importServiceRequests(formData);
+
+      if (response.Status === 201) {
+        const successCount = response.data?.success || parseResult.data.length;
+        toast.success(`Successfully imported ${successCount} service request${successCount !== 1 ? 's' : ''}`);
+        
+        // Show errors if any
+        if (response.data?.errors && response.data.errors.length > 0) {
+          toast.warning(`${response.data.errors.length} error${response.data.errors.length !== 1 ? 's' : ''} occurred during import`);
+          console.warn('Import errors:', response.data.errors);
+        }
+        
+        // Trigger reload of service requests
+        onImport();
+        handleClose();
+      } else {
+        toast.error(response.Message || 'Import failed. Please check the file format and try again.');
+      }
+    } catch (error) {
+      console.error('Failed to import service requests:', error);
+      toast.error('Failed to import service requests. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleClose = () => {
@@ -249,10 +263,10 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
           </Button>
           <Button
             onClick={handleImport}
-            disabled={!parseResult || parseResult.data.length === 0 || parseResult.errors.length > 0}
+            disabled={!parseResult || parseResult.data.length === 0 || parseResult.errors.length > 0 || isProcessing}
             className="bg-gray-900 text-white hover:bg-gray-800"
           >
-            Import {parseResult?.data.length || 0} Request{parseResult?.data.length !== 1 ? 's' : ''}
+            {isProcessing ? 'Importing...' : `Import ${parseResult?.data.length || 0} Request${parseResult?.data.length !== 1 ? 's' : ''}`}
           </Button>
         </DialogFooter>
       </DialogContent>

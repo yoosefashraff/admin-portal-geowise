@@ -38,6 +38,13 @@ export const useAuthStore = create<AuthState>()(
       login: async (UserName, Password) => {
         try {
           const response = await loginAction({ UserName, Password });
+          
+          // Also set cookie client-side so it's available for server actions
+          if (response.Cookie && typeof document !== 'undefined') {
+            const maxAge = 60 * 60 * 24 * 30; // 30 days in seconds
+            document.cookie = `xyzCompAuthorize=${response.Cookie}; path=/; max-age=${maxAge}; SameSite=Lax`;
+          }
+          
           set({
             cookie: response.Cookie,
             user: response.UserDetails,
@@ -106,7 +113,14 @@ export const useAuthStore = create<AuthState>()(
         isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {
-        if (state) state.isLoading = false
+        if (state) {
+          state.isLoading = false
+          // Restore cookie to browser cookie store on page load
+          if (state.cookie && typeof document !== 'undefined') {
+            const maxAge = 60 * 60 * 24 * 30; // 30 days in seconds
+            document.cookie = `xyzCompAuthorize=${state.cookie}; path=/; max-age=${maxAge}; SameSite=Lax`;
+          }
+        }
       },
     }
   )
