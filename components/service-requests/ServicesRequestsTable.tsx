@@ -35,9 +35,20 @@ export default function ServicesRequestsTable({
                 <input
                   type="checkbox"
                   checked={hasApprovedServices && allApprovedSelected}
-                  onChange={(e) => onSelectAll(e.target.checked)}
+                  onChange={(e) => {
+                    e.stopPropagation()
+                    onSelectAll(e.target.checked)
+                  }}
+                  onClick={(e) => e.stopPropagation()}
                   disabled={!hasApprovedServices}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  title={
+                    !hasApprovedServices
+                      ? 'No approved services available for selection'
+                      : allApprovedSelected
+                      ? 'Deselect all approved services'
+                      : 'Select all approved services'
+                  }
                 />
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border-r border-gray-200/50">
@@ -68,18 +79,30 @@ export default function ServicesRequestsTable({
                   }`}
                 >
                   {/* Checkbox */}
-                  <td className="px-4 py-4 border-r border-gray-200/50">
+                  <td className="px-4 py-4 border-r border-gray-200/50" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={isSelected}
-                      onChange={(e) => onSelect(request.id, e.target.checked)}
+                      onChange={(e) => {
+                        e.stopPropagation()
+                        if (!isDisabled) {
+                          onSelect(request.id, e.target.checked)
+                        }
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (isDisabled) {
+                          e.preventDefault()
+                        }
+                      }}
                       disabled={isDisabled}
-                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                       title={
                         isDisabled
                           ? `Auto Dispatch is available only for Approved services. Current status: ${request.status}`
                           : 'Select service for Auto Dispatch'
                       }
+                      aria-label={`Select ${request.name} for auto dispatch`}
                     />
                   </td>
 

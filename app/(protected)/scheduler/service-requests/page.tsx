@@ -86,43 +86,119 @@ export default function ServiceRequestsPage() {
           }
         }
 
-        // Map API bookings to ServiceRequest format
-        const bookings = response.Object || []
-        const mappedRequests: ServiceRequest[] = bookings.map((booking: any, index: number) => {
-          const userId = booking.userId || (typeof booking.id === 'number' ? booking.id : undefined)
+        // Map API response to ServiceRequest format
+        // API returns Barber[] with Callouts[] nested inside
+        const barbers = response.Object || []
+        
+        // Extract all callouts from all barbers and flatten into a single array
+        const allCallouts: any[] = []
+        barbers.forEach((barber: any) => {
+          if (barber.Callouts && Array.isArray(barber.Callouts)) {
+            barber.Callouts.forEach((callout: any) => {
+              // Add barber info to each callout for reference
+              allCallouts.push({
+                ...callout,
+                ProviderId: barber.UserID,
+                ProviderName: barber.FullName || barber.UserName,
+              })
+            })
+          }
+        })
+        
+        // Log first callout to debug field names
+        if (allCallouts.length > 0) {
+          console.log('Sample callout from API:', allCallouts[0])
+          console.log('Available callout fields:', Object.keys(allCallouts[0]))
+        }
+        
+        const mappedRequests: ServiceRequest[] = allCallouts.map((callout: any, index: number) => {
+          // Map Callout fields to ServiceRequest format
+          // Callout has: Id, BookingDate, TimeSlot, Customer, ServiceName, Address, BlockHourId
+          const calloutId = callout.Id || callout.id || callout.ID || `callout-${index}`
+          const customerName = callout.Customer || callout.customer || callout.CustomerName || callout.customerName || ''
+          const serviceName = callout.ServiceName || callout.serviceName || callout.Service || callout.service || ''
+          const address = callout.Address || callout.address || ''
+          const bookingDate = callout.BookingDate || callout.bookingDate || ''
+          const timeSlot = callout.TimeSlot || callout.timeSlot || ''
+          
+          // Try to get phone number from callout (might not be in Callout, might need separate lookup)
+          const phone = callout.PhoneNumber || callout.phoneNumber || callout.Phone || callout.phone || callout.CustomerPhone || callout.customerPhone || ''
+          
+          // Provider info from barber
+          const providerId = callout.ProviderId
+          const providerName = callout.ProviderName
+          
+          // For credits, we might need to use ProviderId or calloutId
+          // Since credits are mapped by UserId, and callouts might not have direct userId,
+          // we'll use ProviderId as a fallback
+          const userId = callout.UserId || callout.userId || callout.UserID || providerId
           const creditInfo = userId && creditsMap.has(userId) 
             ? creditsMap.get(userId)! 
             : { approved: 0, used: 0, remaining: 0 }
 
+          // Determine status - Callouts are typically "Approved" or "Confirmed" when they appear
+          // If there's a status field, use it; otherwise default to "Approved" for callouts
+          const statusStr = String(callout.Status || callout.status || 'Approved').trim()
+          let normalizedStatus: 'Approved' | 'Pending' | 'Draft' | 'Rejected' = 'Approved'
+          if (statusStr) {
+            const statusLower = statusStr.toLowerCase()
+            if (statusLower === 'approved' || statusLower === 'confirmed') {
+              normalizedStatus = 'Approved'
+            } else if (statusLower === 'pending') {
+              normalizedStatus = 'Pending'
+            } else if (statusLower === 'rejected' || statusLower === 'cancelled') {
+              normalizedStatus = 'Rejected'
+            } else {
+              normalizedStatus = 'Draft'
+            }
+          }
+
           return {
-            id: String(booking.id || index),
-            name: booking.customerName || 'Unknown Customer',
-            phone: booking.customerPhone || '',
-            service: booking.serviceName || 'Unknown Service',
-            address: booking.address || '',
+            id: String(calloutId),
+            name: customerName || 'Unknown Customer',
+            phone: phone || '',
+            service: serviceName || 'Unknown Service',
+            address: address || '',
             credits: {
               approved: creditInfo.approved,
               used: creditInfo.used,
               remaining: creditInfo.remaining,
             },
-            preferredStaff: booking.preferredStaff || [],
-            preferredDays: booking.preferredDays || [],
-            status: (booking.status === 'Approved' || booking.status === 'Confirmed') 
-              ? 'Approved' 
-              : booking.status === 'Pending' 
-              ? 'Pending' 
-              : 'Draft',
+            preferredStaff: providerName ? [providerName] : (callout.PreferredStaff || callout.preferredStaff || []),
+            preferredDays: callout.PreferredDays || callout.preferredDays || [],
+            status: normalizedStatus,
             userId: userId,
-            serviceId: booking.serviceId,
+            serviceId: callout.ServiceId || callout.serviceId || undefined,
             approvedUserCreditId: creditInfo.creditId,
           }
         })
 
-        setRequests(mappedRequests)
+        // Merge with pending requests from sessionStorage (newly created)
+        const pendingRequests = sessionStorage.getItem('pendingServiceRequests');
+        let allRequests = mappedRequests;
+        
+        if (pendingRequests) {
+          try {
+            const pending = JSON.parse(pendingRequests);
+            if (Array.isArray(pending) && pending.length > 0) {
+              // Merge pending requests with API data (pending first, then API data)
+              allRequests = [...pending, ...mappedRequests];
+              // Clear sessionStorage after merging
+              sessionStorage.removeItem('pendingServiceRequests');
+              toast.success(`${pending.length} new service request${pending.length !== 1 ? 's' : ''} added`);
+            }
+          } catch (error) {
+            console.error('Error parsing pending service requests:', error);
+            sessionStorage.removeItem('pendingServiceRequests');
+          }
+        }
+
+        // Set requests (empty array if no data)
+        setRequests(allRequests)
       } catch (err) {
         console.error('Failed to load service requests:', err)
         setError(err instanceof Error ? err.message : 'Failed to load service requests')
-        toast.error('Failed to load service requests')
+        setRequests([]) // Set to empty array on error
       } finally {
         setIsLoading(false)
       }
@@ -215,11 +291,12 @@ export default function ServiceRequestsPage() {
             return new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime()
           })
 
+        // Set logs (empty array if no data)
         setLogs(mappedLogs)
       } catch (err) {
         console.error('Failed to load dispatch logs:', err)
         setLogsError(err instanceof Error ? err.message : 'Failed to load dispatch logs')
-        toast.error('Failed to load dispatch logs')
+        setLogs([]) // Set to empty array on error
       } finally {
         setIsLoadingLogs(false)
       }
@@ -280,11 +357,12 @@ export default function ServiceRequestsPage() {
     const selectedServices = requests.filter((r) => selectedIds.has(r.id) && r.status === 'Approved')
     if (selectedServices.length === 0) return
 
-    // Navigate to progress page with selected service IDs
-    router.push('/scheduler/auto-dispatch/progress', {
-      // @ts-ignore - Next.js router state
-      state: { serviceIds: selectedServices.map((s) => s.id) },
-    })
+    // Store selected service IDs in sessionStorage for the progress page
+    const serviceIds = selectedServices.map((s) => s.id)
+    sessionStorage.setItem('autoDispatchServiceIds', JSON.stringify(serviceIds))
+
+    // Navigate to progress page
+    router.push('/scheduler/auto-dispatch/progress')
   }
 
   // Get selected approved services count

@@ -123,28 +123,44 @@ export default function DashboardPage() {
         let serviceRequests: ServiceRequest[] = [];
         if (serviceRequestsResponse.status === 'fulfilled') {
           if (serviceRequestsResponse.value.Status === 201) {
-          const bookings = serviceRequestsResponse.value.Object || [];
-          serviceRequests = bookings.map((booking: any, index: number) => ({
-            id: String(booking.id || index),
-            name: booking.customerName || 'Unknown Customer',
-            phone: booking.customerPhone || '',
-            service: booking.serviceName || 'Unknown Service',
-            address: booking.address || '',
+          // API returns Barber[] with Callouts[] nested inside
+          const barbers = serviceRequestsResponse.value.Object || [];
+          
+          // Extract all callouts from all barbers
+          const allCallouts: any[] = [];
+          barbers.forEach((barber: any) => {
+            if (barber.Callouts && Array.isArray(barber.Callouts)) {
+              barber.Callouts.forEach((callout: any) => {
+                allCallouts.push({
+                  ...callout,
+                  ProviderId: barber.UserID,
+                  ProviderName: barber.FullName || barber.UserName,
+                });
+              });
+            }
+          });
+          
+          serviceRequests = allCallouts.map((callout: any, index: number) => ({
+            id: String(callout.Id || callout.id || `callout-${index}`),
+            name: callout.Customer || callout.customer || 'Unknown Customer',
+            phone: callout.PhoneNumber || callout.phoneNumber || callout.Phone || callout.phone || '',
+            service: callout.ServiceName || callout.serviceName || 'Unknown Service',
+            address: callout.Address || callout.address || '',
             credits: {
               approved: 0,
               used: 0,
               remaining: 0,
             },
-            preferredStaff: booking.preferredStaff || [],
-            preferredDays: booking.preferredDays || [],
+            preferredStaff: callout.ProviderName ? [callout.ProviderName] : [],
+            preferredDays: [],
             status:
-              booking.status === 'Approved' || booking.status === 'Confirmed'
+              callout.Status === 'Approved' || callout.Status === 'Confirmed' || callout.status === 'Approved' || callout.status === 'Confirmed'
                 ? 'Approved'
-                : booking.status === 'Pending'
+                : callout.Status === 'Pending' || callout.status === 'Pending'
                   ? 'Pending'
-                  : 'Draft',
-            userId: booking.userId,
-            serviceId: booking.serviceId,
+                  : 'Approved', // Default to Approved for callouts
+            userId: callout.UserId || callout.userId || callout.ProviderId,
+            serviceId: callout.ServiceId || callout.serviceId,
           }));
           } else {
             console.warn('Service requests API returned non-201 status:', serviceRequestsResponse.value.Status);

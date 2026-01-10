@@ -37,9 +37,10 @@ interface Step3FormProps {
   initialData?: Partial<ServiceRequestFormData>;
   onSubmit: (data: Partial<ServiceRequestFormData>) => void;
   onBack: () => void;
+  isSubmitting?: boolean;
 }
 
-export default function Step3Form({ initialData, onSubmit, onBack }: Step3FormProps) {
+export default function Step3Form({ initialData, onSubmit, onBack, isSubmitting = false }: Step3FormProps) {
   const { user } = useAuthStore();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -375,9 +376,10 @@ export default function Step3Form({ initialData, onSubmit, onBack }: Step3FormPr
           </Button>
           <Button
             type="submit"
-            className="px-6 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
+            disabled={isSubmitting}
+            className="px-6 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Submit
+            {isSubmitting ? 'Creating...' : 'Submit'}
           </Button>
         </div>
       </form>
