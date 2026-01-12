@@ -110,7 +110,7 @@ class ServerAxiosConfig {
       headers: {
         "Content-Type": "application/json",
       },
-      timeout: 60000, // 60 second timeout for all requests
+      timeout: 25000, // 25 second timeout (Netlify functions timeout at 30s, so we need to fail earlier)
     });
 
     // Log the actual URL being used - use console.warn so it's visible in production
@@ -181,14 +181,25 @@ class ServerAxiosConfig {
         return response.data;
       },
       (error) => {
+        // Check if it's a timeout error
+        const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+        
         // Log error details
         console.error('❌ API Request failed:', {
           url: error.config?.url,
           fullUrl: error.config ? `${this.baseURL}${error.config.url}` : 'unknown',
           status: error.response?.status,
           message: error.message,
+          code: error.code,
+          isTimeout: isTimeout,
           baseURL: this.baseURL
         });
+        
+        // Enhance timeout error message
+        if (isTimeout) {
+          console.error('⏱️ Request timed out after 25 seconds. The backend API may be slow or unresponsive.');
+          error.message = 'Request timeout: The backend API took too long to respond. Please try again or contact support if the issue persists.';
+        }
         
         // Check if error is a redirect (3xx status)
         if (error.response && error.response.status >= 300 && error.response.status < 400) {
