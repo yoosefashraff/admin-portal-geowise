@@ -6,8 +6,35 @@ import axios, {
 } from "axios";
 import { cookies } from "next/headers";
 
-// Remove trailing slash from API URL to avoid double slashes
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api').replace(/\/+$/, '');
+// Function to get API base URL - read at runtime to ensure env var is available
+function getApiBaseUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  
+  // Log for debugging (server-side only)
+  if (typeof window === 'undefined') {
+    console.log('🔍 API Configuration:', {
+      envVar: envUrl,
+      hasEnvVar: !!envUrl,
+      nodeEnv: process.env.NODE_ENV
+    });
+  }
+  
+  // Validate that we have a proper API URL
+  if (!envUrl || envUrl.includes('localhost') || envUrl.includes('netlify.app')) {
+    const errorMsg = `Invalid API URL: ${envUrl}. NEXT_PUBLIC_API_URL must be set to the backend API URL (e.g., https://gw5cn.geowise.ai)`;
+    console.error('❌', errorMsg);
+    throw new Error(errorMsg);
+  }
+  
+  // Remove trailing slash and ensure no /api suffix
+  let baseUrl = envUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+  
+  if (typeof window === 'undefined') {
+    console.log('✅ Using API Base URL:', baseUrl);
+  }
+  
+  return baseUrl;
+}
 
 // ============================================================================
 // Token Manager (Server-side)
@@ -49,17 +76,22 @@ class ServerTokenManager {
 class ServerAxiosConfig {
   private instance: AxiosInstance;
   private accessToken?: string;
+  private baseURL: string;
 
   private constructor(accessToken?: string) {
     this.accessToken = accessToken;
+    this.baseURL = getApiBaseUrl(); // Get URL at runtime
 
     this.instance = axios.create({
-      baseURL: API_BASE_URL,
+      baseURL: this.baseURL,
       headers: {
         "Content-Type": "application/json",
       },
       timeout: 60000, // 60 second timeout for all requests
     });
+
+    // Log the actual URL being used
+    console.log('🚀 ServerAxiosConfig created with baseURL:', this.baseURL);
 
     this.setupInterceptors();
   }
@@ -81,24 +113,24 @@ class ServerAxiosConfig {
   }
 
   /**
-   * Setup request interceptor - add token to header
+   * Setup request interceptor - add token to header and log requests
    */
   private setupRequestInterceptor(): void {
     this.instance.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
+        // Log the full URL being called
+        const fullUrl = `${this.baseURL}${config.url}`;
+        console.log('📡 Making API request:', {
+          method: config.method?.toUpperCase(),
+          url: config.url,
+          fullUrl: fullUrl,
+          baseURL: this.baseURL
+        });
+
         if (this.accessToken && config.headers) {
           config.headers.Cookie = `xyzCompAuthorize=${this.accessToken}`;
-          // Log cookie being sent for debugging
-          console.log('Sending cookie in request:', {
-            url: config.url,
-            hasCookie: !!this.accessToken,
-            cookieLength: this.accessToken?.length || 0
-          });
         } else {
-          console.warn('No access token available for request:', {
-            url: config.url,
-            hasToken: !!this.accessToken
-          });
+          console.warn('⚠️ No access token available for request:', config.url);
         }
         return config;
       },
@@ -126,9 +158,18 @@ class ServerAxiosConfig {
         return response.data;
       },
       (error) => {
+        // Log error details
+        console.error('❌ API Request failed:', {
+          url: error.config?.url,
+          fullUrl: error.config ? `${this.baseURL}${error.config.url}` : 'unknown',
+          status: error.response?.status,
+          message: error.message,
+          baseURL: this.baseURL
+        });
+        
         // Check if error is a redirect (3xx status)
         if (error.response && error.response.status >= 300 && error.response.status < 400) {
-          console.warn('Server redirected (likely to login page):', {
+          console.warn('⚠️ Server redirected (likely to login page):', {
             url: error.config?.url,
             status: error.response.status,
             location: error.response.headers?.location
