@@ -12,18 +12,36 @@ function getApiBaseUrl(): string {
   
   // Log for debugging (server-side only) - use console.warn so it's visible in production
   if (typeof window === 'undefined') {
-    console.warn('🔍 API Configuration:', {
+    console.warn('🔍 API Configuration Check:', {
       envVar: envUrl,
       hasEnvVar: !!envUrl,
-      nodeEnv: process.env.NODE_ENV
+      nodeEnv: process.env.NODE_ENV,
+      isLocalhost: envUrl?.includes('localhost'),
+      isNetlify: envUrl?.includes('netlify.app'),
+      isGeowise: envUrl?.includes('geowise.ai')
     });
   }
   
-  // Validate that we have a proper API URL
-  if (!envUrl || envUrl.includes('localhost') || envUrl.includes('netlify.app')) {
-    const errorMsg = `Invalid API URL: ${envUrl}. NEXT_PUBLIC_API_URL must be set to the backend API URL (e.g., https://gw5cn.geowise.ai)`;
-    console.error('❌', errorMsg);
+  // Strict validation - must be set and must point to backend
+  if (!envUrl) {
+    const errorMsg = `❌ NEXT_PUBLIC_API_URL is not set! Please set it to the backend API URL (e.g., https://gw5cn.geowise.ai) in Netlify environment variables.`;
+    console.error(errorMsg);
     throw new Error(errorMsg);
+  }
+  
+  // Check for invalid URLs (localhost, netlify frontend, etc.)
+  const invalidPatterns = ['localhost', 'netlify.app', '127.0.0.1', '0.0.0.0'];
+  const hasInvalidPattern = invalidPatterns.some(pattern => envUrl.toLowerCase().includes(pattern));
+  
+  if (hasInvalidPattern) {
+    const errorMsg = `❌ Invalid API URL: "${envUrl}". NEXT_PUBLIC_API_URL must be set to the backend API URL (https://gw5cn.geowise.ai), not the frontend URL. Current value appears to be pointing to: ${envUrl.includes('netlify.app') ? 'Netlify frontend' : 'localhost'}. Please check Netlify environment variables.`;
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+  
+  // Ensure it's pointing to the correct backend domain
+  if (!envUrl.includes('geowise.ai') && !envUrl.includes('gw5cn')) {
+    console.warn('⚠️ WARNING: API URL does not appear to be the Geowise backend:', envUrl);
   }
   
   // Remove trailing slash and ensure no /api suffix
@@ -31,6 +49,11 @@ function getApiBaseUrl(): string {
   
   if (typeof window === 'undefined') {
     console.warn('✅ Using API Base URL:', baseUrl);
+    console.warn('📋 Full API configuration:', {
+      originalEnvVar: envUrl,
+      resolvedBaseUrl: baseUrl,
+      isProduction: process.env.NODE_ENV === 'production'
+    });
   }
   
   return baseUrl;

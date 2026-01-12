@@ -1,6 +1,22 @@
 import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api';
+// Client-side API URL validation
+function getClientApiUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  
+  // In production, this should never be localhost or netlify.app
+  if (typeof window !== 'undefined' && envUrl) {
+    if (envUrl.includes('localhost') || envUrl.includes('netlify.app')) {
+      console.error('❌ Invalid API URL in client bundle:', envUrl);
+      console.error('This indicates NEXT_PUBLIC_API_URL was set incorrectly during build.');
+      console.error('Please rebuild with NEXT_PUBLIC_API_URL=https://gw5cn.geowise.ai');
+    }
+  }
+  
+  return envUrl || 'http://localhost:3000/api';
+}
+
+const API_BASE_URL = getClientApiUrl();
 
 const axiosInstance: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,

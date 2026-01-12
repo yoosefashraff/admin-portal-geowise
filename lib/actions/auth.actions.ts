@@ -8,7 +8,16 @@ const API = process.env.NEXT_PUBLIC_API_URL;
 
 export async function loginAction(data: LoginRequest) {
   if (!API) {
-    throw new Error("API URL is not configured. Please check your environment variables.");
+    const errorMsg = "❌ API URL is not configured. NEXT_PUBLIC_API_URL must be set in Netlify environment variables to https://gw5cn.geowise.ai";
+    console.error(errorMsg);
+    throw new Error(errorMsg);
+  }
+  
+  // Validate API URL is not pointing to frontend
+  if (API.includes('netlify.app') || API.includes('localhost')) {
+    const errorMsg = `❌ Invalid API URL: "${API}". NEXT_PUBLIC_API_URL must be set to the backend API (https://gw5cn.geowise.ai), not the frontend URL.`;
+    console.error(errorMsg);
+    throw new Error(errorMsg);
   }
 
   try {
