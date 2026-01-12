@@ -76,48 +76,57 @@ export default function DateTimeSelectPage() {
 
   useEffect(() => {
     async function load(user : User) {
-      const today = dayjs().format("YYYY-MM-DD");
-      const sixMonthsLater = dayjs().add(6, "month").format("YYYY-MM-DD");
-      const response : {List : string[]} = await getbarberavilabelbookingdate(
-        {
-          BarberId: provider ? JSON.parse(provider).ProviderId : 0,
-          FromDate: today,
-          ToDate: sixMonthsLater,
-          ServiceZoneId: provider ? JSON.parse(provider).ServiceZoneId : 0,
-          AssociationType: 1,
-          CompanyAdminId: user.UserID,
-          TimeZone: timeZone || 'Europe/London'
-        }
-      );
+      try {
+        setLoading(true);
+        const today = dayjs().format("YYYY-MM-DD");
+        const sixMonthsLater = dayjs().add(6, "month").format("YYYY-MM-DD");
+        const response : {List : string[]} = await getbarberavilabelbookingdate(
+          {
+            BarberId: provider ? JSON.parse(provider).ProviderId : 0,
+            FromDate: today,
+            ToDate: sixMonthsLater,
+            ServiceZoneId: provider ? JSON.parse(provider).ServiceZoneId : 0,
+            AssociationType: 1,
+            CompanyAdminId: user.UserID,
+            TimeZone: timeZone || 'Europe/London'
+          }
+        );
 
-      if(!response?.List || response.List.length === 0){
+        if(!response?.List || response.List.length === 0){
+          setMonthGroup([]);
+          setCurrentMonth(null);
+          setLoading(false);
+          setTimeLoading(false);
+          return;
+        }
+
+        // Set the available dates
+        setDateAvailable(response.List);
+        // Group the dates by month
+        const monthG = groupDatesByMonthArray(response.List);
+        // Set the month group
+        setMonthGroup(monthG);
+        // Set the first month as the current month
+        const monthFromDate = dayjs(barberDate || monthG[0].dates[0]).format("YYYY-MM");
+        const cm = monthG.find((m) => m.month === monthFromDate) || monthG[0];
+        setCurrentMonth(cm);
+        // Set the first date as the selected date
+        setSelectedDate( barberDate || monthG[0].dates[0]);
+
+        setMonth(new Date(barberDate || monthG[0].dates[0]));
+
+        setTimeout(() => {
+          daysSwiper.current?.slideTo(cm.dates.indexOf(barberDate || monthG[0].dates[0]), 0);
+        }, 100);
+      } catch (error: any) {
+        console.error('Error loading available dates:', error);
+        toast.error(error?.message || 'Failed to load available dates. Please try again.');
         setMonthGroup([]);
         setCurrentMonth(null);
+      } finally {
         setLoading(false);
         setTimeLoading(false);
-        return;
       }
-
-      // Set the available dates
-      setDateAvailable(response.List);
-      // Group the dates by month
-      const monthG = groupDatesByMonthArray(response.List);
-      // Set the month group
-      setMonthGroup(monthG);
-      // Set the first month as the current month
-      const monthFromDate = dayjs(barberDate || monthG[0].dates[0]).format("YYYY-MM");
-      const cm = monthG.find((m) => m.month === monthFromDate) || monthG[0];
-      setCurrentMonth(cm);
-      // Set the first date as the selected date
-      setSelectedDate( barberDate || monthG[0].dates[0]);
-
-      setMonth(new Date(barberDate || monthG[0].dates[0]));
-
-      setTimeout(() => {
-        daysSwiper.current?.slideTo(cm.dates.indexOf(barberDate || monthG[0].dates[0]), 0);
-      }, 100);
-
-      setLoading(false);
     }
     if(user){
       load(user);
@@ -127,43 +136,50 @@ export default function DateTimeSelectPage() {
   useEffect(() => {
     if(selectedDate){
       async function loadTimeAvailability() {
-        setTimeLoading(true);
+        try {
+          setTimeLoading(true);
 
-        let serviceId = 0;
-        const parsed = JSON.parse(service);
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.Id) {
-          serviceId = parsed[0].Id;
-        }
-        if(!serviceId){
-          router.replace('/scheduler/select-service');
-        }
-
-        const response : {List : string[]} = await getbarbertimeslotslist(
-          {
-            BarberId: provider ? JSON.parse(provider).ProviderId : 0,
-            Date: selectedDate || dayjs().format("YYYY-MM-DD"),
-            BookingType: 2,
-            ServiceId: serviceId,
-            Lat: location ? JSON.parse(location).Lat : 0,
-            Lng: location ? JSON.parse(location).Lng : 0,
-            AssociationType: 1,
-            CompanyAdminId: user?.UserID ?? 0,
-            TimeZone: timeZone || 'Europe/London'
+          let serviceId = 0;
+          const parsed = JSON.parse(service);
+          if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.Id) {
+            serviceId = parsed[0].Id;
           }
-        );
-        if(!response?.List || response.List.length === 0){
-          setTimeSlots([]);
-          setTimeLoading(false);
-          return;
-        }
-        setTimeSlots(response.List);
-        setSelectedTime(timingSlot || response.List[0]);
-        
-        setTimeLoading(false);
+          if(!serviceId){
+            router.replace('/scheduler/select-service');
+            return;
+          }
 
-        setTimeout(() => {
-          timeSwiper.current?.slideTo(response.List.indexOf(timingSlot || response.List[0]), 0);
-        }, 100);
+          const response : {List : string[]} = await getbarbertimeslotslist(
+            {
+              BarberId: provider ? JSON.parse(provider).ProviderId : 0,
+              Date: selectedDate || dayjs().format("YYYY-MM-DD"),
+              BookingType: 2,
+              ServiceId: serviceId,
+              Lat: location ? JSON.parse(location).Lat : 0,
+              Lng: location ? JSON.parse(location).Lng : 0,
+              AssociationType: 1,
+              CompanyAdminId: user?.UserID ?? 0,
+              TimeZone: timeZone || 'Europe/London'
+            }
+          );
+          if(!response?.List || response.List.length === 0){
+            setTimeSlots([]);
+            setTimeLoading(false);
+            return;
+          }
+          setTimeSlots(response.List);
+          setSelectedTime(timingSlot || response.List[0]);
+
+          setTimeout(() => {
+            timeSwiper.current?.slideTo(response.List.indexOf(timingSlot || response.List[0]), 0);
+          }, 100);
+        } catch (error: any) {
+          console.error('Error loading time slots:', error);
+          toast.error(error?.message || 'Failed to load time slots. Please try again.');
+          setTimeSlots([]);
+        } finally {
+          setTimeLoading(false);
+        }
       }
       loadTimeAvailability();
     }

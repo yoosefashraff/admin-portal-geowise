@@ -36,21 +36,37 @@ export async function searchCompanyProvider(data: CompanyProviderPayload) : Prom
 
 export async function getbarberavilabelbookingdate(data : barberAvilabelDatePayload) : Promise<{List : string[]}>{
   try {
+    console.warn('📅 Fetching available booking dates:', data);
     const response : {List : string[]} = await serverAPI.post('/search/getbarberavilabelbookingdate', data);
+    console.warn('✅ Available dates response:', response);
     return response;
   } catch (err: any) {
-    const errorMessage = err.response?.statusText || err.message;
-    throw new Error(errorMessage || "Failed to fetch barber availability");
+    console.error('❌ Error fetching barber availability:', {
+      error: err.message,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      data: err.response?.data
+    });
+    const errorMessage = err.response?.statusText || err.message || "Failed to fetch barber availability";
+    throw new Error(errorMessage);
   }
 }
 
 export async function getbarbertimeslotslist(data : barberTimesLotsListPayload) : Promise<{List : string[]}>{
   try {
+    console.warn('⏰ Fetching time slots list:', data);
     const response : {List : string[]} = await serverAPI.post('/search/getbarbertimeslotslist', data);
+    console.warn('✅ Time slots response:', response);
     return response;
   } catch (err: any) {
-    const errorMessage = err.response?.statusText || err.message;
-    throw new Error(errorMessage || "Failed to fetch time slots");
+    console.error('❌ Error fetching time slots:', {
+      error: err.message,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      data: err.response?.data
+    });
+    const errorMessage = err.response?.statusText || err.message || "Failed to fetch time slots";
+    throw new Error(errorMessage);
   }
 }
 
