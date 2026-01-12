@@ -10,9 +10,9 @@ import { cookies } from "next/headers";
 function getApiBaseUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   
-  // Log for debugging (server-side only)
+  // Log for debugging (server-side only) - use console.warn so it's visible in production
   if (typeof window === 'undefined') {
-    console.log('🔍 API Configuration:', {
+    console.warn('🔍 API Configuration:', {
       envVar: envUrl,
       hasEnvVar: !!envUrl,
       nodeEnv: process.env.NODE_ENV
@@ -30,7 +30,7 @@ function getApiBaseUrl(): string {
   let baseUrl = envUrl.replace(/\/+$/, '').replace(/\/api$/, '');
   
   if (typeof window === 'undefined') {
-    console.log('✅ Using API Base URL:', baseUrl);
+    console.warn('✅ Using API Base URL:', baseUrl);
   }
   
   return baseUrl;
@@ -90,8 +90,8 @@ class ServerAxiosConfig {
       timeout: 60000, // 60 second timeout for all requests
     });
 
-    // Log the actual URL being used
-    console.log('🚀 ServerAxiosConfig created with baseURL:', this.baseURL);
+    // Log the actual URL being used - use console.warn so it's visible in production
+    console.warn('🚀 ServerAxiosConfig created with baseURL:', this.baseURL);
 
     this.setupInterceptors();
   }
@@ -118,9 +118,9 @@ class ServerAxiosConfig {
   private setupRequestInterceptor(): void {
     this.instance.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
-        // Log the full URL being called
+        // Log the full URL being called - use console.warn so it's visible in production
         const fullUrl = `${this.baseURL}${config.url}`;
-        console.log('📡 Making API request:', {
+        console.warn('📡 Making API request:', {
           method: config.method?.toUpperCase(),
           url: config.url,
           fullUrl: fullUrl,
