@@ -46,7 +46,7 @@ export default function ProtectedLayout({children}: {children: React.ReactNode;}
 
       const verifyAuth = async () => {
         try {
-          const response = await getCurrentUserAction();
+        const response = await getCurrentUserAction();
           clearTimeout(timeoutId);
           
           if (response.Status === 201 && response.Object) {

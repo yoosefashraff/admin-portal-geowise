@@ -81,10 +81,10 @@ export const useAuthStore = create<AuthState>()(
           
           if (response.Status === 201 && response.Object) {
             // Update user if we have valid auth
-            set({
-              isAuthenticated: true,
-              isLoading: false,
-            });
+          set({
+            isAuthenticated: true,
+            isLoading: false,
+          });
           } else {
             // Invalid auth, clear everything
             set({

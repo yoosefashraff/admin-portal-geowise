@@ -417,7 +417,7 @@ export default function DashboardPage() {
   return (
     <div className="max-w-7xl mx-auto py-4 sm:py-6 lg:py-8 px-4 sm:px-6">
       <div className="animate-fade-in-up">
-        <DashboardHeader title="Dashboard" description="Overview of your business operations" />
+      <DashboardHeader title="Dashboard" description="Overview of your business operations" />
       </div>
 
       {/* KPI Section with Auto-Rotating Tabs */}
@@ -449,36 +449,36 @@ export default function DashboardPage() {
           <TabsContent value="requests" className="m-0 animate-fade-in animate-delay-200">
             <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <div className="animate-fade-in-up animate-delay-200">
-                <DashboardStatsCard
-                  title="Total Service Requests"
-                  value={stats.totalServiceRequests}
-                  icon={Calendar}
-                  variant="default"
-                />
+              <DashboardStatsCard
+                title="Total Service Requests"
+                value={stats.totalServiceRequests}
+                icon={Calendar}
+                variant="default"
+              />
               </div>
               <div className="animate-fade-in-up animate-delay-300">
-                <DashboardStatsCard
-                  title="Pending Requests"
-                  value={stats.pendingRequests}
-                  icon={Clock}
-                  variant="warning"
-                />
+              <DashboardStatsCard
+                title="Pending Requests"
+                value={stats.pendingRequests}
+                icon={Clock}
+                variant="warning"
+              />
               </div>
               <div className="animate-fade-in-up animate-delay-400">
-                <DashboardStatsCard
-                  title="Approved Requests"
-                  value={stats.approvedRequests}
-                  icon={CheckCircle2}
-                  variant="success"
-                />
+              <DashboardStatsCard
+                title="Approved Requests"
+                value={stats.approvedRequests}
+                icon={CheckCircle2}
+                variant="success"
+              />
               </div>
               <div className="animate-fade-in-up animate-delay-500">
-                <DashboardStatsCard
-                  title="Today's Requests"
-                  value={stats.todayRequests}
-                  icon={Activity}
-                  variant="default"
-                />
+              <DashboardStatsCard
+                title="Today's Requests"
+                value={stats.todayRequests}
+                icon={Activity}
+                variant="default"
+              />
               </div>
             </div>
           </TabsContent>
@@ -486,44 +486,44 @@ export default function DashboardPage() {
           <TabsContent value="operations" className="m-0 animate-fade-in animate-delay-200">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
               <div className="animate-fade-in-up animate-delay-200">
-                <DashboardStatsCard
-                  title="Total Providers"
-                  value={stats.totalProviders}
-                  icon={Users}
-                  variant="default"
-                />
+              <DashboardStatsCard
+                title="Total Providers"
+                value={stats.totalProviders}
+                icon={Users}
+                variant="default"
+              />
               </div>
               <div className="animate-fade-in-up animate-delay-300">
-                <DashboardStatsCard
-                  title="Active Providers"
-                  value={stats.activeProviders}
-                  icon={Users}
-                  variant="success"
-                />
+              <DashboardStatsCard
+                title="Active Providers"
+                value={stats.activeProviders}
+                icon={Users}
+                variant="success"
+              />
               </div>
               <div className="animate-fade-in-up animate-delay-400">
-                <DashboardStatsCard
-                  title="Today's Bookings"
-                  value={stats.todayBookings}
-                  icon={Calendar}
-                  variant="default"
-                />
+              <DashboardStatsCard
+                title="Today's Bookings"
+                value={stats.todayBookings}
+                icon={Calendar}
+                variant="default"
+              />
               </div>
               <div className="animate-fade-in-up animate-delay-500">
-                <DashboardStatsCard
-                  title="Completed Today"
-                  value={stats.completedToday}
-                  icon={CheckCircle2}
-                  variant="success"
-                />
+              <DashboardStatsCard
+                title="Completed Today"
+                value={stats.completedToday}
+                icon={CheckCircle2}
+                variant="success"
+              />
               </div>
               <div className="animate-fade-in-up animate-delay-500">
-                <DashboardStatsCard
-                  title="In Progress"
-                  value={stats.inProgress}
-                  icon={Clock}
-                  variant="warning"
-                />
+              <DashboardStatsCard
+                title="In Progress"
+                value={stats.inProgress}
+                icon={Clock}
+                variant="warning"
+              />
               </div>
             </div>
           </TabsContent>
@@ -531,12 +531,12 @@ export default function DashboardPage() {
           <TabsContent value="services" className="m-0 animate-fade-in animate-delay-200">
             <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <div className="animate-fade-in-up animate-delay-200">
-                <DashboardStatsCard
-                  title="Total Services"
-                  value={stats.totalServices}
-                  icon={Package}
-                  variant="default"
-                />
+              <DashboardStatsCard
+                title="Total Services"
+                value={stats.totalServices}
+                icon={Package}
+                variant="default"
+              />
               </div>
             </div>
           </TabsContent>

@@ -19,10 +19,10 @@ export async function loginAction(data: LoginRequest) {
     let res: Response;
     try {
       res = await fetch(`${API}/company/userlogin`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        cache: "no-store",
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+    cache: "no-store",
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -53,7 +53,7 @@ export async function loginAction(data: LoginRequest) {
       throw new Error(text || `Login failed with status ${res.status}`);
     }
 
-    if (!res.ok) {
+  if (!res.ok) {
       const errorMessage = json.message || json.Message || json.error || `Login failed with status ${res.status}`;
       throw new Error(errorMessage);
     }
@@ -61,30 +61,30 @@ export async function loginAction(data: LoginRequest) {
     // Ensure we have a cookie value
     if (!json.Cookie) {
       throw new Error("No authentication cookie received from server. Please check your credentials.");
-    }
+  }
 
     try {
-      const cookieStore = await cookies();
+  const cookieStore = await cookies();
 
       // Set cookie with 30 days expiration for persistent login
       const maxAge = 60 * 60 * 24 * 30; // 30 days in seconds
 
-      cookieStore.set({
-        name: "xyzCompAuthorize",
-        value: json.Cookie,
-        path: "/",
-        httpOnly: false,
+  cookieStore.set({
+    name: "xyzCompAuthorize",
+    value: json.Cookie,
+    path: "/",
+    httpOnly: false,
         sameSite: "lax",
         secure: false,
         maxAge: maxAge,
-      });
+  });
     } catch (cookieError: any) {
       // Still return the response even if cookie setting fails
       // The client-side store will handle it
       // Log error but don't fail the login
     }
 
-    return json;
+  return json;
   } catch (error: any) {
     // Ensure error is serializable for Server Actions
     const errorMessage = error instanceof Error 
