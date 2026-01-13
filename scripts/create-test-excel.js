@@ -23,6 +23,7 @@ const expiryDateSerial = excelDate(expiryDate);
 // Test data with REALISTIC locations in Riyadh that could be covered by real providers
 // These are actual residential/commercial areas in Riyadh, not test-only coordinates
 // The dev environment is for testing, but the data should be realistic
+// IMPORTANT: Address field is required for proper mapping - backend needs actual address strings
 const testData = [
   {
     'Mr_no': '38523501',
@@ -34,7 +35,8 @@ const testData = [
     'Remaining_Count': 1,
     'Approval_Start_Date': startDateSerial,
     'Approval_Expiry_Date': expiryDateSerial,
-    'Location': '24.7136,46.6753', // Al Olaya district - real location
+    'Address': '2716 Olaya St, Al Wurud, Riyadh 12251, Saudi Arabia', // Al Olaya district - real address
+    'Location': '24.7136,46.6753', // Coordinates for mapping
     'Latitude': 24.7136,
     'Longitude': 46.6753,
     'Country_Code': 966,
@@ -54,7 +56,8 @@ const testData = [
     'Remaining_Count': 1,
     'Approval_Start_Date': startDateSerial,
     'Approval_Expiry_Date': expiryDateSerial,
-    'Location': '24.6877,46.7215', // Al Malaz district - real location
+    'Address': 'RMDD8074، 8074 جبل نهير، 2185, Ad Dar Al Baida, Riyadh 14518, Saudi Arabia', // Al Malaz district - real address
+    'Location': '24.6877,46.7215', // Coordinates for mapping
     'Latitude': 24.6877,
     'Longitude': 46.7215,
     'Country_Code': 966,
@@ -74,7 +77,8 @@ const testData = [
     'Remaining_Count': 1,
     'Approval_Start_Date': startDateSerial,
     'Approval_Expiry_Date': expiryDateSerial,
-    'Location': '24.7574,46.6428', // Al Muruj district - real location
+    'Address': 'RQJA2976, 2976 No.4, 8167، حي الجزيرة، Riyadh 14261, Saudi Arabia', // Al Muruj district - real address
+    'Location': '24.7574,46.6428', // Coordinates for mapping
     'Latitude': 24.7574,
     'Longitude': 46.6428,
     'Country_Code': 966,
@@ -94,7 +98,8 @@ const testData = [
     'Remaining_Count': 1,
     'Approval_Start_Date': startDateSerial,
     'Approval_Expiry_Date': expiryDateSerial,
-    'Location': '24.6833,46.6167', // Diplomatic Quarter - real location
+    'Address': 'RSNB3234, 3234 At Tanukhi, 7111, Ar Rimayah, Riyadh 14816, Saudi Arabia', // Diplomatic Quarter area - real address
+    'Location': '24.6833,46.6167', // Coordinates for mapping
     'Latitude': 24.6833,
     'Longitude': 46.6167,
     'Country_Code': 966,
@@ -114,7 +119,8 @@ const testData = [
     'Remaining_Count': 1,
     'Approval_Start_Date': startDateSerial,
     'Approval_Expiry_Date': expiryDateSerial,
-    'Location': '24.6982,46.6856', // Al Olaya area - real location
+    'Address': 'PM7G+C4F, Al Olaya, Riyadh 12251, Saudi Arabia', // Al Olaya area - real address
+    'Location': '24.6982,46.6856', // Coordinates for mapping
     'Latitude': 24.6982,
     'Longitude': 46.6856,
     'Country_Code': 966,

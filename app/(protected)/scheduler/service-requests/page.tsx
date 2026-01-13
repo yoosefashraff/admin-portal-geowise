@@ -247,10 +247,25 @@ export default function ServiceRequestsPage() {
           callout['Approved Service'] || callout['Approved_Service'] || callout.ApprovedService || 
           callout.approvedService || callout.Approved_Service || ''
         
-        // Try multiple field name variations for address (from imports: Location might be lat,lng)
-        const address = callout.Address || callout.address || 
-          (callout.Location && typeof callout.Location === 'string' && !callout.Location.includes(',') ? callout.Location : '') ||
-          (callout.location && typeof callout.location === 'string' && !callout.location.includes(',') ? callout.location : '') || ''
+        // Try multiple field name variations for address
+        // Priority: Address field (actual address string) > Location (if not lat,lng format)
+        // Imported records should have Address field with full address strings
+        let address = callout.Address || callout.address || ''
+        // Fallback: Use Location only if it's not in lat,lng format (doesn't contain comma or is clearly an address)
+        if (!address && callout.Location) {
+          const locationStr = String(callout.Location)
+          // If Location doesn't look like coordinates (no comma or has text), use it as address
+          if (!locationStr.includes(',') || !/^-?\d+\.?\d*,-?\d+\.?\d*$/.test(locationStr.trim())) {
+            address = locationStr
+          }
+        }
+        // Final fallback: check location field (lowercase)
+        if (!address && callout.location) {
+          const locationStr = String(callout.location)
+          if (!locationStr.includes(',') || !/^-?\d+\.?\d*,-?\d+\.?\d*$/.test(locationStr.trim())) {
+            address = locationStr
+          }
+        }
         
         const bookingDate = callout.BookingDate || callout.bookingDate || ''
         const timeSlot = callout.TimeSlot || callout.timeSlot || ''
