@@ -51,9 +51,26 @@ export default function ServiceRequestsPage() {
       setIsLoading(true)
       setError(null)
       try {
+        // Fetch a wider date range to include imported records that may have future booking dates
+        // Imported records might have booking dates set to future dates, so we need to fetch beyond today
+        const today = new Date()
+        const startDate = new Date(today)
+        startDate.setDate(startDate.getDate() - 7) // 7 days ago
+        const endDate = new Date(today)
+        endDate.setDate(endDate.getDate() + 90) // 90 days in the future
+        
+        const startDateStr = startDate.toISOString().split('T')[0]
+        const endDateStr = endDate.toISOString().split('T')[0]
+        
+        console.log('📅 Fetching service requests with date range:', {
+          startDate: startDateStr,
+          endDate: endDateStr,
+          reason: 'Including imported records that may have future booking dates'
+        })
+        
         const response = await fetchServiceRequests(
-          undefined,
-          undefined,
+          startDateStr,
+          endDateStr,
           false,
           user.UserID
         )
