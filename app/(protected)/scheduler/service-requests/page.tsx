@@ -246,20 +246,21 @@ export default function ServiceRequestsPage() {
         
         // Check if credits are in the callout (from imported records)
         const hasImportedCredits = callout.Approved_Count !== undefined || callout['Approved_Count'] !== undefined
-        let creditInfo: { approved: number; used: number; remaining: number }
+        let creditInfo: { approved: number; used: number; remaining: number; creditId?: number }
         
         if (hasImportedCredits) {
           // Use credits from imported record
           creditInfo = {
             approved: callout.Approved_Count || callout['Approved_Count'] || callout.ApprovedCount || 0,
             used: callout.Used_Count || callout['Used_Count'] || callout.UsedCount || 0,
-            remaining: callout.Remaining_Count || callout['Remaining_Count'] || callout.RemainingCount || 0
+            remaining: callout.Remaining_Count || callout['Remaining_Count'] || callout.RemainingCount || 0,
+            creditId: callout.ApprovedUserCreditId || callout.approvedUserCreditId || callout.CreditId || callout.creditId || undefined
           }
         } else {
           // Use credits from creditsMap (for regular bookings)
           creditInfo = userId && creditsMap.has(userId) 
             ? creditsMap.get(userId)! 
-            : { approved: 0, used: 0, remaining: 0 }
+            : { approved: 0, used: 0, remaining: 0, creditId: undefined }
         }
 
         // Determine status - Callouts are typically "Approved" or "Confirmed" when they appear
