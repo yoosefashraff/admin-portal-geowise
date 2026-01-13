@@ -257,12 +257,36 @@ export async function importServiceRequests(
     console.warn('⏳ Starting import request to:', fullUrl);
     const requestStartTime = Date.now();
     
+    // Add parameter to prevent auto-conversion to bookings
+    // Backend should keep imported records as pending service requests until explicitly dispatched
+    // Try adding as query parameter or form field
+    const preventAutoConvert = true; // We want to prevent auto-conversion
+    
+    // Add as query parameter (if backend supports it)
+    const endpointWithParams = preventAutoConvert 
+      ? `${endpoint}?autoConvert=false&createBookings=false`
+      : endpoint;
+    
+    // Also try adding as form field (some backends prefer this for multipart/form-data)
+    if (preventAutoConvert) {
+      formData.append('autoConvert', 'false');
+      formData.append('createBookings', 'false');
+      formData.append('keepAsPending', 'true');
+    }
+    
+    console.warn('📤 Import request parameters:', {
+      endpoint: endpointWithParams,
+      preventAutoConvert,
+      formDataKeys: Array.from(formData.keys()),
+      note: 'Backend should keep imported records as pending service requests, not convert to bookings immediately'
+    });
+    
     // For FormData, axios will automatically set Content-Type with boundary
     // Don't set it manually as it will break the upload
     let response: any;
     try {
       response = await serviceRequestsAPI.post(
-        endpoint,
+        endpointWithParams,
         formData
       );
       const requestDuration = Date.now() - requestStartTime;
