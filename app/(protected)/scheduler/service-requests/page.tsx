@@ -184,27 +184,54 @@ export default function ServiceRequestsPage() {
       
       // Log first callout to debug field names
       if (allCallouts.length > 0) {
-        console.log('Sample callout from API:', allCallouts[0])
-        console.log('Available callout fields:', Object.keys(allCallouts[0]))
+        console.log('📋 Sample callout from API:', allCallouts[0])
+        console.log('📋 Available callout fields:', Object.keys(allCallouts[0]))
+        
+        // Check if any callouts are from imports
+        const importedCallouts = allCallouts.filter((c: any) => c.IsImported || c.Patient_Name || c['Approved Service'])
+        if (importedCallouts.length > 0) {
+          console.log(`✅ Found ${importedCallouts.length} imported callout(s) in regular bookings`)
+          console.log('📋 Sample imported callout fields:', Object.keys(importedCallouts[0]))
+          console.log('📋 Sample imported callout data:', importedCallouts[0])
+        }
       }
       
       const mappedRequests: ServiceRequest[] = allCallouts.map((callout: any, index: number) => {
         // Map Callout fields to ServiceRequest format
         // Callout has: Id, BookingDate, TimeSlot, Customer, ServiceName, Address, BlockHourId
-        const calloutId = callout.Id || callout.id || callout.ID || `callout-${index}`
-        const customerName = callout.Customer || callout.customer || callout.CustomerName || callout.customerName || ''
-        const serviceName = callout.ServiceName || callout.serviceName || callout.Service || callout.service || ''
-        const address = callout.Address || callout.address || ''
+        // Imported records might have: Patient_Name, Approved Service, Mobile_Number, Location, etc.
+        const calloutId = callout.Id || callout.id || callout.ID || callout.Mr_no || callout.mr_no || `callout-${index}`
+        
+        // Try multiple field name variations for customer name (from imports: Patient_Name)
+        const customerName = callout.Customer || callout.customer || callout.CustomerName || callout.customerName || 
+          callout.Patient_Name || callout.patient_name || callout.PatientName || callout.patientName || 
+          callout.Name || callout.name || ''
+        
+        // Try multiple field name variations for service (from imports: Approved Service)
+        const serviceName = callout.ServiceName || callout.serviceName || callout.Service || callout.service || 
+          callout['Approved Service'] || callout['Approved_Service'] || callout.ApprovedService || 
+          callout.approvedService || callout.Approved_Service || ''
+        
+        // Try multiple field name variations for address (from imports: Location might be lat,lng)
+        const address = callout.Address || callout.address || 
+          (callout.Location && typeof callout.Location === 'string' && !callout.Location.includes(',') ? callout.Location : '') ||
+          (callout.location && typeof callout.location === 'string' && !callout.location.includes(',') ? callout.location : '') || ''
+        
         const bookingDate = callout.BookingDate || callout.bookingDate || ''
         const timeSlot = callout.TimeSlot || callout.timeSlot || ''
         
         // Get creation date for sorting (newest first)
-        // Try multiple date fields: CreatedAt, createdAt, BookingDate, bookingDate, or use current date
+        // Try multiple date fields: CreatedAt, createdAt, BookingDate, bookingDate, Approval_Start_Date, or use current date
         const createdAt = callout.CreatedAt || callout.createdAt || callout.BookingDate || callout.bookingDate || 
-          callout.DateCreated || callout.dateCreated || new Date().toISOString()
+          callout.DateCreated || callout.dateCreated || 
+          callout.Approval_Start_Date || callout.approval_start_date || 
+          new Date().toISOString()
         
-        // Try to get phone number from callout (might not be in Callout, might need separate lookup)
-        const phone = callout.PhoneNumber || callout.phoneNumber || callout.Phone || callout.phone || callout.CustomerPhone || callout.customerPhone || ''
+        // Try multiple field name variations for phone (from imports: Mobile_Number)
+        const phone = callout.PhoneNumber || callout.phoneNumber || callout.Phone || callout.phone || 
+          callout.CustomerPhone || callout.customerPhone || 
+          callout.Mobile_Number || callout.mobile_number || callout.MobileNumber || callout.mobileNumber ||
+          callout.Mobile || callout.mobile || ''
         
         // Provider info from barber
         const providerId = callout.ProviderId
@@ -213,10 +240,27 @@ export default function ServiceRequestsPage() {
         // For credits, we might need to use ProviderId or calloutId
         // Since credits are mapped by UserId, and callouts might not have direct userId,
         // we'll use ProviderId as a fallback
-        const userId = callout.UserId || callout.userId || callout.UserID || providerId
-          const creditInfo = userId && creditsMap.has(userId) 
+        // For imported records, credits might be in the callout itself (Approved_Count, Used_Count, Remaining_Count)
+        const userId = callout.UserId || callout.userId || callout.UserID || 
+          callout['ID number '] || callout.id_number || providerId
+        
+        // Check if credits are in the callout (from imported records)
+        const hasImportedCredits = callout.Approved_Count !== undefined || callout['Approved_Count'] !== undefined
+        let creditInfo: { approved: number; used: number; remaining: number }
+        
+        if (hasImportedCredits) {
+          // Use credits from imported record
+          creditInfo = {
+            approved: callout.Approved_Count || callout['Approved_Count'] || callout.ApprovedCount || 0,
+            used: callout.Used_Count || callout['Used_Count'] || callout.UsedCount || 0,
+            remaining: callout.Remaining_Count || callout['Remaining_Count'] || callout.RemainingCount || 0
+          }
+        } else {
+          // Use credits from creditsMap (for regular bookings)
+          creditInfo = userId && creditsMap.has(userId) 
             ? creditsMap.get(userId)! 
             : { approved: 0, used: 0, remaining: 0 }
+        }
 
         // Determine status - Callouts are typically "Approved" or "Confirmed" when they appear
         // If there's a status field, use it; otherwise default to "Approved" for callouts
@@ -235,7 +279,7 @@ export default function ServiceRequestsPage() {
           }
         }
 
-          return {
+          const mappedRequest = {
           id: String(calloutId),
           name: customerName || 'Unknown Customer',
           phone: phone || '',
@@ -254,6 +298,30 @@ export default function ServiceRequestsPage() {
             approvedUserCreditId: creditInfo.creditId,
           createdAt: createdAt, // For sorting (newest first)
           }
+          
+          // Log if this looks like an imported record (has Patient_Name or other import fields)
+          if (callout.Patient_Name || callout['Approved Service'] || callout.Mobile_Number || callout.IsImported) {
+            console.log('📥 Mapped imported record:', {
+              originalFields: {
+                Patient_Name: callout.Patient_Name,
+                'Approved Service': callout['Approved Service'],
+                Mobile_Number: callout.Mobile_Number,
+                Location: callout.Location,
+                Approved_Count: callout.Approved_Count,
+                Used_Count: callout.Used_Count,
+                Remaining_Count: callout.Remaining_Count,
+              },
+              mappedTo: {
+                name: mappedRequest.name,
+                service: mappedRequest.service,
+                phone: mappedRequest.phone,
+                address: mappedRequest.address,
+                credits: mappedRequest.credits,
+              }
+            })
+          }
+          
+          return mappedRequest
         })
 
       // Merge with pending requests from sessionStorage (newly created)
