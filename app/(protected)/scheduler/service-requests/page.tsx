@@ -794,27 +794,88 @@ export default function ServiceRequestsPage() {
     console.log('Reloading service requests from API after import...')
     await loadServiceRequests()
     
+    // After reload, search for imported records to help user find them
+    // Imported records typically have "Test Customer" in the name or specific patterns
+    setTimeout(() => {
+      const importedNames = importedData?.map((row: any) => {
+        // Try to get the name from various possible fields
+        return row['Patient_Name'] || row['Name'] || row['name'] || row['Customer'] || ''
+      }).filter(Boolean) || []
+      
+      // If we have imported names, search for them
+      if (importedNames.length > 0) {
+        // Search for the first imported name to help user find the records
+        const searchTerm = importedNames[0] || 'Test Customer'
+        setSearchQuery(searchTerm)
+        setCurrentPage(1) // Reset to first page
+        console.log(`🔍 Auto-searching for imported records: "${searchTerm}"`)
+        console.log(`📊 Total requests: ${requests.length}, searching for:`, importedNames.slice(0, 5))
+      } else {
+        // Fallback: search for "Test Customer" pattern
+        setSearchQuery('Test Customer')
+        setCurrentPage(1)
+        console.log('🔍 Auto-searching for "Test Customer" records')
+      }
+    }, 1500) // Wait for requests to be loaded
+    
     // Show success message with helpful note
     if (importedData && Array.isArray(importedData) && importedData.length > 0) {
-      toast.success(`Successfully imported ${importedData.length} service request${importedData.length !== 1 ? 's' : ''}. Refreshing list...`, {
+      toast.success(`Successfully imported ${importedData.length} service request${importedData.length !== 1 ? 's' : ''}. Searching for imported records...`, {
         description: '⚠️ Note: Backend is converting imported records to bookings immediately. They should remain as pending service requests until dispatched.',
         duration: 7000
       })
     } else {
-      toast.success('Import completed. Refreshing list...', {
+      toast.success('Import completed. Searching for imported records...', {
         description: '⚠️ Note: Backend is converting imported records to bookings immediately. This behavior should be changed.',
         duration: 7000
       })
     }
     
-    // Log current request count for debugging
+    // After reload, search for imported records to help user find them
+    // Imported records typically have "Test Customer" in the name or specific patterns
     setTimeout(() => {
+      const importedNames = importedData?.map((row: any) => {
+        // Try to get the name from various possible fields
+        return row['Patient_Name'] || row['Name'] || row['name'] || row['Customer'] || ''
+      }).filter(Boolean) || []
+      
+      // Find imported records in the loaded requests
+      const foundImported = requests.filter(r => {
+        const name = r.name.toLowerCase()
+        return importedNames.some((importedName: string) => 
+          name.includes(importedName.toLowerCase())
+        ) || name.includes('test customer')
+      })
+      
       console.log('📊 Service requests after import:', {
         totalRequests: requests.length,
-        requestIds: requests.map(r => r.id).slice(0, 10),
-        requestNames: requests.map(r => r.name).slice(0, 10)
+        totalPages: Math.ceil(requests.length / itemsPerPage),
+        importedNamesSearched: importedNames.slice(0, 5),
+        foundImportedCount: foundImported.length,
+        foundImportedNames: foundImported.map(r => r.name).slice(0, 10),
+        foundImportedPositions: foundImported.map(r => {
+          const index = requests.findIndex(req => req.id === r.id)
+          return { name: r.name, position: index + 1, page: Math.ceil((index + 1) / itemsPerPage) }
+        }).slice(0, 10),
+        note: foundImported.length > 0 
+          ? `✅ Found ${foundImported.length} imported records. They are on page ${Math.ceil((requests.findIndex(r => r.id === foundImported[0].id) + 1) / itemsPerPage)}`
+          : '⚠️ Imported records not found. They may have different names or be filtered out.'
       })
-    }, 1000)
+      
+      // If we have imported names, search for them
+      if (importedNames.length > 0) {
+        // Search for the first imported name to help user find the records
+        const searchTerm = importedNames[0] || 'Test Customer'
+        setSearchQuery(searchTerm)
+        setCurrentPage(1) // Reset to first page
+        console.log(`🔍 Auto-searching for imported records: "${searchTerm}"`)
+      } else if (foundImported.length > 0) {
+        // If we found imported records but don't have names, search for "Test Customer"
+        setSearchQuery('Test Customer')
+        setCurrentPage(1)
+        console.log('🔍 Auto-searching for "Test Customer" records')
+      }
+    }, 2000) // Wait for requests to be loaded
   }
 
 
