@@ -95,21 +95,31 @@ export default function ServiceRequestsPage() {
         }
 
       // Also fetch imported service requests (before they're converted to bookings)
+      // Note: Imported records might be converted to bookings immediately, so they may appear in the regular callouts
       let importedRequests: any[] = []
       try {
         console.log('Attempting to fetch imported service requests from API...')
         const importedResponse = await fetchImportedServiceRequests()
         if (importedResponse.Status === 201 && importedResponse.data && Array.isArray(importedResponse.data)) {
           importedRequests = importedResponse.data
-          console.log(`✅ Found ${importedRequests.length} imported service requests from API`)
+          console.log(`✅ Found ${importedRequests.length} imported service requests from dedicated endpoint`)
           if (importedRequests.length > 0) {
             console.log('Sample imported request:', importedRequests[0])
+            console.log('All imported request fields:', Object.keys(importedRequests[0]))
           }
         } else {
-          console.log('⚠️ No imported service requests found in API response:', importedResponse)
+          console.log('⚠️ No imported service requests found in dedicated endpoint. They may be converted to bookings and appear in regular callouts.')
+          console.log('Import response details:', {
+            Status: importedResponse.Status,
+            hasData: !!importedResponse.data,
+            dataType: typeof importedResponse.data,
+            dataIsArray: Array.isArray(importedResponse.data),
+            dataLength: Array.isArray(importedResponse.data) ? importedResponse.data.length : 'N/A'
+          })
         }
       } catch (importedError) {
-        console.warn('Could not fetch imported service requests:', importedError)
+        console.warn('Could not fetch imported service requests from dedicated endpoint:', importedError)
+        console.log('ℹ️ Imported records may have been converted to bookings and will appear in regular service requests list')
       }
 
       // Map API response to ServiceRequest format
@@ -254,8 +264,17 @@ export default function ServiceRequestsPage() {
         fromBookings: allCallouts.length - importedRequests.length,
         fromImported: importedRequests.length,
         sampleRequest: allRequests.length > 0 ? allRequests[0] : null,
-        requestNames: allRequests.map(r => r.name).slice(0, 10)
+        requestNames: allRequests.map(r => r.name).slice(0, 10),
+        requestIds: allRequests.map(r => r.id).slice(0, 10),
+        requestStatuses: allRequests.map(r => r.status),
+        sortedByDate: 'newest first'
       })
+      
+      // Check if imported requests might be in the regular callouts
+      if (importedRequests.length === 0 && allCallouts.length > 0) {
+        console.log('ℹ️ No imported requests found in dedicated endpoint. Checking if they appear in regular callouts...')
+        console.log(`Found ${allCallouts.length} total callouts from regular API`)
+      }
 
       // Set requests (empty array if no data)
       setRequests(allRequests)
@@ -576,12 +595,27 @@ export default function ServiceRequestsPage() {
     console.log('Reloading service requests from API after import...')
     await loadServiceRequests()
     
-    // Show success message
+    // Show success message with helpful note
     if (importedData && Array.isArray(importedData) && importedData.length > 0) {
-      toast.success(`Successfully imported ${importedData.length} service request${importedData.length !== 1 ? 's' : ''}. Refreshing list...`)
+      toast.success(`Successfully imported ${importedData.length} service request${importedData.length !== 1 ? 's' : ''}. Refreshing list...`, {
+        description: 'Imported records may appear in the service requests list. If not visible, they may have been converted to bookings.',
+        duration: 5000
+      })
     } else {
-      toast.success('Import completed. Refreshing list...')
+      toast.success('Import completed. Refreshing list...', {
+        description: 'Check the service requests list for imported records. They may appear as bookings.',
+        duration: 5000
+      })
     }
+    
+    // Log current request count for debugging
+    setTimeout(() => {
+      console.log('📊 Service requests after import:', {
+        totalRequests: requests.length,
+        requestIds: requests.map(r => r.id).slice(0, 10),
+        requestNames: requests.map(r => r.name).slice(0, 10)
+      })
+    }, 1000)
   }
 
 

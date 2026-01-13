@@ -85,13 +85,23 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
         const successCount = response.data?.success || 0;
         
         // Log the full response to see what the backend returns
-        console.log('Import successful! Full response:', JSON.stringify(response, null, 2))
+        console.log('✅ Import successful! Full response:', JSON.stringify(response, null, 2))
         console.log('Import response data structure:', {
           success: response.data?.success,
           errors: response.data?.errors,
           dataKeys: response.data ? Object.keys(response.data) : [],
-          fullData: response.data
+          fullData: response.data,
+          hasRecords: !!response.data?.records,
+          recordsLength: Array.isArray(response.data?.records) ? response.data.records.length : 'N/A',
+          hasDataArray: Array.isArray(response.data),
+          dataArrayLength: Array.isArray(response.data) ? response.data.length : 'N/A'
         })
+        
+        // Check if the response contains the imported records
+        const importedRecords = response.data?.records || (Array.isArray(response.data) ? response.data : []);
+        if (Array.isArray(importedRecords) && importedRecords.length > 0) {
+          console.log(`📦 Import response contains ${importedRecords.length} imported records:`, importedRecords);
+        }
         
         // Show errors if any
         if (response.data?.errors && response.data.errors.length > 0) {
@@ -101,6 +111,7 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
         
         // Pass parsed data for logging, but parent will reload from API
         // This ensures we get the actual stored records from the database
+        // Note: If records don't appear, they may have been converted to bookings and will appear in regular service requests
         onImport(parsedData.length > 0 ? parsedData : undefined);
         handleClose();
       } else {
