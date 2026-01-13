@@ -440,9 +440,11 @@ export default function ServiceRequestsPage() {
         console.warn('⚠️ Imported requests were fetched but not mapped correctly. Check field mapping.')
       } else if (importedRequests.length === 0) {
         console.log('ℹ️ No imported service requests found in dedicated endpoint.')
-        console.log('💡 IMPORTANT: Imported records are likely converted to bookings immediately.')
-        console.log(`   Check the regular service requests list - you should see ${allRequests.length} total requests.`)
-        console.log('   The imported records should appear as bookings/callouts in the regular list.')
+        console.warn('⚠️ BACKEND BEHAVIOR: Imported records are being converted to bookings immediately.')
+        console.warn('   This is likely incorrect behavior - imported records should remain as pending service requests.')
+        console.warn('   They should NOT be converted to bookings until explicitly dispatched.')
+        console.log(`   Currently, they appear as bookings in the regular list (${allRequests.length} total requests).`)
+        console.log('   Backend needs to be updated to keep imported records as pending service requests.')
       } else {
         console.log(`✅ Found ${importedRequests.length} imported requests that will be added to the list.`)
       }
@@ -795,13 +797,13 @@ export default function ServiceRequestsPage() {
     // Show success message with helpful note
     if (importedData && Array.isArray(importedData) && importedData.length > 0) {
       toast.success(`Successfully imported ${importedData.length} service request${importedData.length !== 1 ? 's' : ''}. Refreshing list...`, {
-        description: 'Imported records may appear in the service requests list. If not visible, they may have been converted to bookings.',
-        duration: 5000
+        description: '⚠️ Note: Backend is converting imported records to bookings immediately. They should remain as pending service requests until dispatched.',
+        duration: 7000
       })
     } else {
       toast.success('Import completed. Refreshing list...', {
-        description: 'Check the service requests list for imported records. They may appear as bookings.',
-        duration: 5000
+        description: '⚠️ Note: Backend is converting imported records to bookings immediately. This behavior should be changed.',
+        duration: 7000
       })
     }
     

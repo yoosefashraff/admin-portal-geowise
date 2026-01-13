@@ -112,6 +112,11 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
           console.warn('Import errors:', response.data.errors);
         }
         
+        // Warn about backend behavior: imported records are converted to bookings immediately
+        console.warn('⚠️ BACKEND BEHAVIOR: Imported records are being converted to bookings immediately.');
+        console.warn('   This is likely incorrect - they should remain as pending service requests until dispatched.');
+        console.warn('   Backend needs to be updated to keep imported records as pending service requests.');
+        
         // Pass parsed data for logging, but parent will reload from API
         // This ensures we get the actual stored records from the database
         // Note: If records don't appear, they may have been converted to bookings and will appear in regular service requests
