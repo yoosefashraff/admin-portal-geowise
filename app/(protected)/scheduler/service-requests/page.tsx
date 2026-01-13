@@ -184,15 +184,50 @@ export default function ServiceRequestsPage() {
       
       // Log first callout to debug field names
       if (allCallouts.length > 0) {
+        console.log('📋 Total callouts fetched:', allCallouts.length)
         console.log('📋 Sample callout from API:', allCallouts[0])
         console.log('📋 Available callout fields:', Object.keys(allCallouts[0]))
         
         // Check if any callouts are from imports
-        const importedCallouts = allCallouts.filter((c: any) => c.IsImported || c.Patient_Name || c['Approved Service'])
-        if (importedCallouts.length > 0) {
-          console.log(`✅ Found ${importedCallouts.length} imported callout(s) in regular bookings`)
-          console.log('📋 Sample imported callout fields:', Object.keys(importedCallouts[0]))
-          console.log('📋 Sample imported callout data:', importedCallouts[0])
+        // Look for imported records by checking multiple indicators:
+        // 1. IsImported flag
+        // 2. Excel field names (Patient_Name, Approved Service, Mobile_Number)
+        // 3. Test customer names (Test Customer 1-5)
+        // 4. Recent creation dates (within last hour)
+        const now = new Date()
+        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+        const importedCallouts = allCallouts.filter((c: any) => {
+          const hasImportFlag = c.IsImported
+          const hasExcelFields = c.Patient_Name || c['Approved Service'] || c.Mobile_Number || c['Approved_Count']
+          const customerName = c.Customer || c.customer || c.CustomerName || c.Patient_Name || c.Name || ''
+          const isTestCustomer = /Test Customer \d+/i.test(customerName)
+          const isRecent = c.CreatedAt && new Date(c.CreatedAt) > oneHourAgo
+          return hasImportFlag || hasExcelFields || isTestCustomer || isRecent
+        })
+        
+        // Also check all customer names for "Test Customer"
+        const allCustomerNames = allCallouts.map((c: any) => c.Customer || c.customer || c.CustomerName || c.Patient_Name || c.Name || '').filter(Boolean)
+        const testCustomerMatches = allCustomerNames.filter(name => /Test Customer/i.test(name))
+        
+        if (importedCallouts.length > 0 || testCustomerMatches.length > 0) {
+          console.log(`✅ Found ${importedCallouts.length} potentially imported callout(s) in regular bookings`)
+          console.log(`✅ Found ${testCustomerMatches.length} customer name(s) matching "Test Customer":`, testCustomerMatches.slice(0, 10))
+          if (importedCallouts.length > 0) {
+            console.log('📋 Sample imported callout fields:', Object.keys(importedCallouts[0]))
+            console.log('📋 Sample imported callout data:', importedCallouts[0])
+            console.log('📋 All imported callout customer names:', importedCallouts.map((c: any) => c.Customer || c.Patient_Name || c.name).slice(0, 10))
+          }
+        } else {
+          console.log('⚠️ No imported callouts detected in regular bookings')
+          console.log('📋 Total customer names checked:', allCustomerNames.length)
+          console.log('📋 Sample customer names (first 10):', allCustomerNames.slice(0, 10))
+          console.log('📋 Checking first 3 callouts for reference:', allCallouts.slice(0, 3).map((c: any) => ({
+            Customer: c.Customer,
+            ServiceName: c.ServiceName,
+            CreatedAt: c.CreatedAt,
+            BookingDate: c.BookingDate,
+            fields: Object.keys(c).slice(0, 10)
+          })))
         }
       }
       
