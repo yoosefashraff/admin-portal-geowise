@@ -445,9 +445,10 @@ export default function ServiceRequestsPage() {
         // Fetch all active credits with remaining balance
         const creditsResponse = await listApprovedUserCredits({ IsActive: true })
         if (creditsResponse.Status === 201 && creditsResponse.data && Array.isArray(creditsResponse.data)) {
+          const creditsData = creditsResponse.data
           // First, try to match by userId/serviceId for selected services
           selectedServices.forEach((service) => {
-            const matchingCredit = creditsResponse.data.find(
+            const matchingCredit = creditsData.find(
               (credit) => 
                 credit.UserId === service.userId && 
                 credit.ServiceId === service.serviceId &&
@@ -461,7 +462,7 @@ export default function ServiceRequestsPage() {
           // If still no matches, use ALL credits with remaining balance
           if (creditIds.length === 0) {
             console.log('No matching credits found, using all credits with remaining balance')
-            const allCreditsWithRemaining = creditsResponse.data.filter(
+            const allCreditsWithRemaining = creditsData.filter(
               (credit) => credit.Id && (credit.RemainingCredits || 0) > 0
             )
             creditIds.push(...allCreditsWithRemaining.map(c => c.Id!))
