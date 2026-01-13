@@ -21,4 +21,5 @@ export interface ServiceRequest {
   userId?: number
   serviceId?: number
   approvedUserCreditId?: number // ID from ApprovedUserCredits table
+  createdAt?: string // ISO date string for sorting (newest first)
 }

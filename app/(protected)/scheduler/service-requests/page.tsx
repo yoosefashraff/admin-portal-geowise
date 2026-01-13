@@ -144,6 +144,7 @@ export default function ServiceRequestsPage() {
             PhoneNumber: imported.Phone || imported.phone || imported.PhoneNumber || '',
             Status: imported.Status || imported.status || 'Pending',
             IsImported: true, // Flag to identify imported requests
+            CreatedAt: imported.CreatedAt || imported.createdAt || imported.DateCreated || imported.dateCreated || new Date().toISOString(), // Use current date if not provided
           })
         })
       }
@@ -163,6 +164,11 @@ export default function ServiceRequestsPage() {
         const address = callout.Address || callout.address || ''
         const bookingDate = callout.BookingDate || callout.bookingDate || ''
         const timeSlot = callout.TimeSlot || callout.timeSlot || ''
+        
+        // Get creation date for sorting (newest first)
+        // Try multiple date fields: CreatedAt, createdAt, BookingDate, bookingDate, or use current date
+        const createdAt = callout.CreatedAt || callout.createdAt || callout.BookingDate || callout.bookingDate || 
+          callout.DateCreated || callout.dateCreated || new Date().toISOString()
         
         // Try to get phone number from callout (might not be in Callout, might need separate lookup)
         const phone = callout.PhoneNumber || callout.phoneNumber || callout.Phone || callout.phone || callout.CustomerPhone || callout.customerPhone || ''
@@ -213,6 +219,7 @@ export default function ServiceRequestsPage() {
             userId: userId,
           serviceId: callout.ServiceId || callout.serviceId || undefined,
             approvedUserCreditId: creditInfo.creditId,
+          createdAt: createdAt, // For sorting (newest first)
           }
         })
 
@@ -224,8 +231,13 @@ export default function ServiceRequestsPage() {
         try {
           const pending = JSON.parse(pendingRequests);
           if (Array.isArray(pending) && pending.length > 0) {
+            // Ensure pending requests have createdAt for sorting (newest first)
+            const pendingWithDates = pending.map((req: ServiceRequest) => ({
+              ...req,
+              createdAt: req.createdAt || new Date().toISOString(), // Use current date if not set
+            }));
             // Merge pending requests with API data (pending first, then API data)
-            allRequests = [...pending, ...mappedRequests];
+            allRequests = [...pendingWithDates, ...mappedRequests];
             // Clear sessionStorage after merging
             sessionStorage.removeItem('pendingServiceRequests');
             toast.success(`${pending.length} new service request${pending.length !== 1 ? 's' : ''} added`);
@@ -381,6 +393,13 @@ export default function ServiceRequestsPage() {
         req.address.toLowerCase().includes(query)
     )
     }
+
+    // Sort by date (newest first) - most recently added/imported appears first
+    filtered = filtered.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return dateB - dateA // Descending order (newest first)
+    })
 
     return filtered
   }, [requests, searchQuery])
