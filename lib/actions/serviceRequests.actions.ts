@@ -127,36 +127,51 @@ export async function fetchImportedServiceRequests(): Promise<{ Status: number; 
   // Try each endpoint until one works
   for (const endpoint of possibleEndpoints) {
     try {
-      console.log(`Trying to fetch imported service requests from: ${endpoint}`);
+      const fullUrl = `${getServiceRequestsApiUrl()}${endpoint}`;
+      console.warn(`🔍 Trying to fetch imported service requests from: ${endpoint}`);
+      console.warn(`   Full URL: ${fullUrl}`);
       const response: any = await serviceRequestsAPI.get(endpoint);
       
-      console.log(`Response from ${endpoint}:`, {
+      console.warn(`📥 Response from ${endpoint}:`, {
         Status: response.Status,
         isArray: Array.isArray(response),
         hasData: !!response.data,
         hasObject: !!response.Object,
-        dataLength: Array.isArray(response) ? response.length : (response.data?.length || response.Object?.length || 0)
+        dataLength: Array.isArray(response) ? response.length : (response.data?.length || response.Object?.length || 0),
+        responseType: typeof response,
+        responseKeys: typeof response === 'object' ? Object.keys(response) : []
       });
       
       if (response.Status === 201 || Array.isArray(response)) {
         const data = Array.isArray(response) ? response : (response.Object || response.data || []);
         if (Array.isArray(data) && data.length > 0) {
-          console.log(`✅ Successfully fetched ${data.length} imported service requests from ${endpoint}`);
+          console.warn(`✅ Successfully fetched ${data.length} imported service requests from ${endpoint}`);
           return {
             Status: 201,
             data
           };
+        } else {
+          console.warn(`⚠️ Endpoint ${endpoint} returned empty array`);
         }
+      } else {
+        console.warn(`⚠️ Endpoint ${endpoint} returned Status: ${response.Status}`);
       }
     } catch (err: any) {
       // Continue to next endpoint if this one fails
-      console.log(`❌ Endpoint ${endpoint} failed:`, err.message);
+      console.warn(`❌ Endpoint ${endpoint} failed:`, {
+        message: err.message,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        responseData: err.response?.data
+      });
       continue;
     }
   }
   
   // If all endpoints failed, return empty array
   console.warn('⚠️ Could not fetch imported service requests from any endpoint. They may not be available via API yet.');
+  console.warn('💡 IMPORTANT: Imported records may have been converted to bookings and will appear in the regular service requests list.');
+  console.warn('   Check the regular service requests table - they should appear there as bookings/callouts.');
   return { Status: 200, data: [] };
 }
 

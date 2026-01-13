@@ -283,7 +283,12 @@ export default function ServiceRequestsPage() {
       if (importedRequests.length > 0 && allRequests.length === 0) {
         console.warn('⚠️ Imported requests were fetched but not mapped correctly. Check field mapping.')
       } else if (importedRequests.length === 0) {
-        console.log('ℹ️ No imported service requests found. They may need to be fetched via a different endpoint or converted to bookings first.')
+        console.log('ℹ️ No imported service requests found in dedicated endpoint.')
+        console.log('💡 IMPORTANT: Imported records are likely converted to bookings immediately.')
+        console.log(`   Check the regular service requests list - you should see ${allRequests.length} total requests.`)
+        console.log('   The imported records should appear as bookings/callouts in the regular list.')
+      } else {
+        console.log(`✅ Found ${importedRequests.length} imported requests that will be added to the list.`)
       }
       } catch (err) {
         console.error('Failed to load service requests:', err)
