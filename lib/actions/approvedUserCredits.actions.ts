@@ -432,3 +432,88 @@ export async function exportApprovedUserCredits(): Promise<{ Status: number; Mes
     return { Status: 500, Message: errorMessage, blob: new Blob() }
   }
 }
+
+/**
+ * Generate bookings from imported service requests and user credits
+ * POST /ApprovedUserCredits/GenerateBookings
+ * 
+ * This endpoint picks up records from imported records and user credits table,
+ * and starts generating bookings based on available credits.
+ * 
+ * ⚠️ WARNING: Use this endpoint carefully. Prepare data only with test customers/services
+ * so importing files should not have impact over production data.
+ * 
+ * @param creditIds - Array of ApprovedUserCredit IDs to use for booking generation
+ *                    Only credits with remaining credits will be used
+ * 
+ * @returns Response with Status, Message, and data containing success/error counts
+ */
+export async function generateBookings(
+  creditIds: number[]
+): Promise<{ 
+  Status: number; 
+  Message?: string; 
+  data?: { 
+    success?: number; 
+    errors?: string[];
+    totalProcessed?: number;
+    bookingsCreated?: number;
+    ErrorLogs?: string[];
+  } 
+}> {
+  try {
+    if (!creditIds || creditIds.length === 0) {
+      return { 
+        Status: 400, 
+        Message: 'At least one credit ID is required' 
+      }
+    }
+
+    console.log('Calling GenerateBookings API with credit IDs:', creditIds)
+    
+    // Add timeout to prevent hanging (60 seconds for booking generation)
+    const response: any = await Promise.race([
+      serverAPI.post('/ApprovedUserCredits/GenerateBookings', {
+        CreditIds: creditIds
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout after 60 seconds')), 60000)
+      )
+    ]) as any
+    
+    console.log('GenerateBookings API response:', {
+      Status: response.Status,
+      Message: response.Message,
+      hasData: !!response.data,
+      hasObject: !!response.Object
+    })
+    
+    if (response.Status === 201) {
+      return { 
+        Status: 201, 
+        Message: response.Message || 'Bookings generated successfully',
+        data: response.Object || response.data || response
+      }
+    } else {
+      return { 
+        Status: response.Status || 500, 
+        Message: response.Message || 'Failed to generate bookings',
+        data: response.Object || response.data || response
+      }
+    }
+  } catch (err: any) {
+    console.error('GenerateBookings API Error:', {
+      message: err.message,
+      name: err.name,
+      response: err.response?.data,
+      status: err.response?.status,
+      statusText: err.response?.statusText
+    })
+    
+    const errorMessage = err.message?.includes('timeout') 
+      ? 'Request timed out. The server may be processing. Please try again or check server logs.'
+      : err.response?.statusText || err.message || 'Failed to generate bookings'
+    
+    return { Status: 500, Message: errorMessage }
+  }
+}

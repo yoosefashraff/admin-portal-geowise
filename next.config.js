@@ -18,6 +18,17 @@ const nextConfig = {
       },
     ],
   },
+  // Proxy API calls in development to avoid CORS issues
+  async rewrites() {
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://gw5cn.geowise.ai';
+    
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${backendUrl}/:path*`,
+      },
+    ];
+  },
   // Performance optimizations
   experimental: {
     optimizePackageImports: [

@@ -4,9 +4,6 @@ import serverAPI from "@/lib/api/axios-server";
 import { fetchBookings } from "./calendar.actions";
 import type { FetchBookingsParams } from "@/lib/types/calendar";
 
-const DEVICE_TOKEN = 'test12345';
-const IS_TEST = true;
-
 /**
  * Fetch service requests for the current date range
  * Defaults to today's date range
@@ -29,6 +26,62 @@ export async function fetchServiceRequests(
   }
 
   return fetchBookings(params)
+}
+
+/**
+ * Fetch imported service requests (before they're converted to bookings)
+ * These are the records imported via the /import endpoint
+ * GET /ServiceRequests/List or similar endpoint
+ */
+export async function fetchImportedServiceRequests(): Promise<{ Status: number; Message?: string; data?: any[] }> {
+  // Try different possible endpoints for listing imported service requests
+  const possibleEndpoints = [
+    '/ApprovedUserCredits/Imported',  // Most likely - same controller as import
+    '/ApprovedUserCredits/ListImported',
+    '/ServiceRequests/Imported',
+    '/ServiceRequests/ListImported',
+    '/ServiceRequest/Imported',
+    '/ServiceRequest/ListImported',
+    '/ServiceRequests/List',
+    '/ServiceRequest/List',
+    '/ServiceRequests',
+    '/ServiceRequest',
+  ];
+  
+  // Try each endpoint until one works
+  for (const endpoint of possibleEndpoints) {
+    try {
+      console.log(`Trying to fetch imported service requests from: ${endpoint}`);
+      const response: any = await serverAPI.get(endpoint);
+      
+      console.log(`Response from ${endpoint}:`, {
+        Status: response.Status,
+        isArray: Array.isArray(response),
+        hasData: !!response.data,
+        hasObject: !!response.Object,
+        dataLength: Array.isArray(response) ? response.length : (response.data?.length || response.Object?.length || 0)
+      });
+      
+      if (response.Status === 201 || Array.isArray(response)) {
+        const data = Array.isArray(response) ? response : (response.Object || response.data || []);
+        if (Array.isArray(data) && data.length > 0) {
+          console.log(`✅ Successfully fetched ${data.length} imported service requests from ${endpoint}`);
+          return {
+            Status: 201,
+            data
+          };
+        }
+      }
+    } catch (err: any) {
+      // Continue to next endpoint if this one fails
+      console.log(`❌ Endpoint ${endpoint} failed:`, err.message);
+      continue;
+    }
+  }
+  
+  // If all endpoints failed, return empty array
+  console.warn('⚠️ Could not fetch imported service requests from any endpoint. They may not be available via API yet.');
+  return { Status: 200, data: [] };
 }
 
 /**
@@ -70,8 +123,29 @@ export async function importServiceRequests(
   formData: FormData
 ): Promise<{ Status: number; Message?: string; data?: { success: number; errors?: string[] } }> {
   try {
-    const response: any = await serverAPI.post(
+    // Log the endpoint being called for debugging
+    const baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api').replace(/\/+$/, '');
+    
+    // Try different possible endpoint paths (backend might use different naming)
+    // Based on pattern: GenerateBookings is under /ApprovedUserCredits, so import might be too
+    // Priority: 1) ApprovedUserCredits/import, 2) ServiceRequests/import, 3) ServiceRequest/import
+    const possibleEndpoints = [
+      '/ApprovedUserCredits/import',  // Most likely - same controller as GenerateBookings
       '/ServiceRequests/import',
+      '/ServiceRequest/import',  // Singular
+      '/import',  // Root level
+    ];
+    
+    const endpoint = possibleEndpoints[0]; // Start with the most likely one
+    console.log('ServiceRequests Import API Request:', {
+      endpoint,
+      baseURL,
+      fullUrl: `${baseURL}${endpoint}`,
+      tryingEndpoints: possibleEndpoints,
+    });
+    
+    const response: any = await serverAPI.post(
+      endpoint,
       formData,
       {
         headers: {
@@ -79,6 +153,19 @@ export async function importServiceRequests(
         }
       }
     )
+    
+    // Log the full import response to see what it contains
+    console.log('📥 Import API Response (full):', JSON.stringify(response, null, 2))
+    console.log('Import API Response (summary):', {
+      Status: response.Status,
+      Message: response.Message,
+      hasData: !!response.data,
+      hasObject: !!response.Object,
+      dataKeys: response.data ? Object.keys(response.data) : [],
+      objectKeys: response.Object ? Object.keys(response.Object) : [],
+      dataType: typeof response.data,
+      objectType: typeof response.Object
+    })
     
     if (response.Status === 201) {
       return { 
@@ -94,7 +181,47 @@ export async function importServiceRequests(
       }
     }
   } catch (err: any) {
-    const errorMessage = err.response?.statusText || err.message || 'Failed to import service requests'
+    // Enhanced error logging
+    console.error('ServiceRequests Import Error:', {
+      message: err.message,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      responseData: err.response?.data,
+      requestUrl: err.config?.url,
+      fullUrl: err.config ? `${err.config.baseURL}${err.config.url}` : 'unknown'
+    })
+    
+    // Handle 404 specifically
+    if (err.response?.status === 404) {
+      const attemptedUrl = err.config ? `${err.config.baseURL}${err.config.url}` : '/ServiceRequests/import';
+      return { 
+        Status: 404, 
+        Message: `Import endpoint not found at ${attemptedUrl}. Please verify with the backend developer the exact endpoint path. Common paths: /ServiceRequests/import, /ServiceRequest/import, or /import` 
+      }
+    }
+    
+    // Handle other HTTP errors
+    if (err.response) {
+      const status = err.response.status || 500
+      const responseData = err.response.data
+      
+      // Try to extract message from response
+      let errorMessage = 'Failed to import service requests'
+      if (typeof responseData === 'string') {
+        errorMessage = responseData
+      } else if (responseData?.Message) {
+        errorMessage = responseData.Message
+      } else if (responseData?.message) {
+        errorMessage = responseData.message
+      } else if (err.response.statusText) {
+        errorMessage = err.response.statusText
+      }
+      
+      return { Status: status, Message: errorMessage }
+    }
+    
+    // Network or other errors
+    const errorMessage = err.message || 'Failed to import service requests'
     return { Status: 500, Message: errorMessage }
   }
 }

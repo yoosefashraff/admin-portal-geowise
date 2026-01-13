@@ -21,7 +21,7 @@ import { useAuthStore } from "@/lib/store/authStore";
 import { useRouter } from "next/navigation";
 import { User } from "@/lib/types/auth.types";
 import { MonthGroup, SchedulerData } from "@/lib/types/scheduler.types";
-import { getbarberavilabelbookingdate, getbarbertimeslotslist } from "@/lib/actions/scheduler.actions";
+import { apiClient } from "@/lib/api/axios-instance";
 import Link from "next/link";
 import dayjs from "dayjs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -80,7 +80,7 @@ export default function DateTimeSelectPage() {
         setLoading(true);
         const today = dayjs().format("YYYY-MM-DD");
         const sixMonthsLater = dayjs().add(6, "month").format("YYYY-MM-DD");
-        const response : {List : string[]} = await getbarberavilabelbookingdate(
+        const response : {List : string[]} = await apiClient.post('/search/getbarberavilabelbookingdate',
           {
             BarberId: provider ? JSON.parse(provider).ProviderId : 0,
             FromDate: today,
@@ -97,6 +97,7 @@ export default function DateTimeSelectPage() {
           setCurrentMonth(null);
           setLoading(false);
           setTimeLoading(false);
+          toast.info('No available dates found for the selected provider and service. Please try selecting a different provider or service.');
           return;
         }
 
@@ -149,7 +150,7 @@ export default function DateTimeSelectPage() {
             return;
           }
 
-          const response : {List : string[]} = await getbarbertimeslotslist(
+          const response : {List : string[]} = await apiClient.post('/search/getbarbertimeslotslist',
             {
               BarberId: provider ? JSON.parse(provider).ProviderId : 0,
               Date: selectedDate || dayjs().format("YYYY-MM-DD"),
@@ -165,6 +166,7 @@ export default function DateTimeSelectPage() {
           if(!response?.List || response.List.length === 0){
             setTimeSlots([]);
             setTimeLoading(false);
+            toast.info('No available time slots for the selected date.');
             return;
           }
           setTimeSlots(response.List);

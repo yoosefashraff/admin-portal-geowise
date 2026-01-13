@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { parseCSV, validateAndMapServiceRequests, readFileAsText, type CSVParseResult, type ServiceRequestCSVRow } from '@/lib/utils/csv-import';
+import * as XLSX from 'xlsx';
 import type { ServiceRequest } from '@/lib/types/serviceRequest.types';
 import { importServiceRequests } from '@/lib/actions/serviceRequests.actions';
 import { toast } from 'sonner';
@@ -19,52 +19,62 @@ import { toast } from 'sonner';
 interface CSVImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onImport: () => void; // Changed to callback to trigger reload instead of passing data
+  onImport: (importedData?: any[]) => void; // Callback with optional imported data
 }
 
 export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialogProps) {
   const [file, setFile] = useState<File | null>(null);
-  const [parseResult, setParseResult] = useState<CSVParseResult<ServiceRequestCSVRow> | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [parsedData, setParsedData] = useState<any[]>([]);
 
   const handleFileSelect = async (selectedFile: File | null) => {
     if (!selectedFile) {
       setFile(null);
-      setParseResult(null);
+      setParsedData([]);
       return;
     }
 
-    // Validate file type
-    if (!selectedFile.name.endsWith('.csv') && !selectedFile.type.includes('csv')) {
-      alert('Please select a CSV file');
+    // Validate file type - backend expects Excel files (.xlsx, .xls)
+    const validExtensions = ['.xlsx', '.xls'];
+    const validTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+    ];
+    
+    const hasValidExtension = validExtensions.some(ext => selectedFile.name.toLowerCase().endsWith(ext));
+    const hasValidType = validTypes.some(type => selectedFile.type.includes(type));
+    
+    if (!hasValidExtension && !hasValidType) {
+      toast.error('Invalid file type. Only Excel files (.xlsx, .xls) are allowed');
       return;
     }
 
-    setFile(selectedFile);
-    setIsProcessing(true);
-
+    // Parse Excel file client-side to show preview and pass data to parent
     try {
-      const content = await readFileAsText(selectedFile);
-      const csvRows = parseCSV(content);
-      const result = validateAndMapServiceRequests(csvRows);
-      setParseResult(result);
+      const arrayBuffer = await selectedFile.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      
+      setParsedData(jsonData);
+      setFile(selectedFile);
     } catch (error) {
-      console.error('Error parsing CSV:', error);
-      alert('Failed to parse CSV file. Please check the file format.');
+      console.error('Error parsing Excel file:', error);
+      toast.error('Failed to parse Excel file. Please check the file format.');
       setFile(null);
-      setParseResult(null);
-    } finally {
-      setIsProcessing(false);
+      setParsedData([]);
     }
   };
 
   const handleImport = async () => {
-    if (!parseResult || parseResult.data.length === 0 || !file) return;
+    if (!file) return;
 
     setIsProcessing(true);
     try {
-      // Create FormData with CSV file
+      // Create FormData with Excel file
       const formData = new FormData();
       formData.append('file', file);
 
@@ -72,8 +82,19 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
       const response = await importServiceRequests(formData);
 
       if (response.Status === 201) {
-        const successCount = response.data?.success || parseResult.data.length;
-        toast.success(`Successfully imported ${successCount} service request${successCount !== 1 ? 's' : ''}`);
+        const successCount = response.data?.success || response.data?.totalProcessed || 0;
+        
+        // Log the full response to see what the backend returns
+        console.log('Import successful! Full response:', JSON.stringify(response, null, 2))
+        console.log('Import response data structure:', {
+          success: response.data?.success,
+          totalProcessed: response.data?.totalProcessed,
+          errors: response.data?.errors,
+          hasImportedRecords: !!response.data?.importedRecords,
+          hasRecords: !!response.data?.records,
+          dataKeys: response.data ? Object.keys(response.data) : [],
+          fullData: response.data
+        })
         
         // Show errors if any
         if (response.data?.errors && response.data.errors.length > 0) {
@@ -81,8 +102,9 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
           console.warn('Import errors:', response.data.errors);
         }
         
-        // Trigger reload of service requests
-        onImport();
+        // Pass parsed data for logging, but parent will reload from API
+        // This ensures we get the actual stored records from the database
+        onImport(parsedData.length > 0 ? parsedData : undefined);
         handleClose();
       } else {
         toast.error(response.Message || 'Import failed. Please check the file format and try again.');
@@ -97,7 +119,7 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
 
   const handleClose = () => {
     setFile(null);
-    setParseResult(null);
+    setParsedData([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -110,10 +132,10 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="w-5 h-5" />
-            Import Service Requests from CSV
+            Import Service Requests from Excel
           </DialogTitle>
           <DialogDescription>
-            Upload a CSV file to import service requests. The CSV should include columns for Name, Phone, Service, and Address.
+            Upload an Excel file (.xlsx or .xls) to import service requests. The file should include columns for Name, Phone, Service, and Address.
           </DialogDescription>
         </DialogHeader>
 
@@ -123,21 +145,21 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
             <input
               ref={fileInputRef}
               type="file"
-              accept=".csv"
+              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
               onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
               className="hidden"
-              id="csv-file-input"
+              id="excel-file-input"
             />
             <label
-              htmlFor="csv-file-input"
+              htmlFor="excel-file-input"
               className="cursor-pointer flex flex-col items-center gap-2"
             >
               <FileText className="w-12 h-12 text-gray-400" />
               <div className="text-sm font-medium text-gray-700">
-                {file ? file.name : 'Click to select CSV file'}
+                {file ? file.name : 'Click to select Excel file'}
               </div>
               <div className="text-xs text-gray-500">
-                CSV files only
+                Excel files (.xlsx, .xls) only
               </div>
             </label>
           </div>
@@ -145,112 +167,67 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
           {/* Processing State */}
           {isProcessing && (
             <div className="flex items-center justify-center py-4">
-              <div className="text-sm text-gray-600">Processing CSV file...</div>
+              <div className="text-sm text-gray-600">Processing Excel file...</div>
             </div>
           )}
 
-          {/* Parse Results */}
-          {parseResult && (
+          {/* File Selected Confirmation */}
+          {file && (
             <div className="space-y-4">
-              {/* Summary */}
+              {/* File Info */}
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
                 <div className="flex items-center gap-2 text-sm font-medium text-gray-900">
                   <CheckCircle2 className="w-4 h-4 text-green-600" />
-                  {parseResult.data.length} row{parseResult.data.length !== 1 ? 's' : ''} parsed successfully
+                  File selected: {file.name}
                 </div>
-                {parseResult.errors.length > 0 && (
-                  <div className="flex items-center gap-2 text-sm font-medium text-red-600">
-                    <AlertCircle className="w-4 h-4" />
-                    {parseResult.errors.length} error{parseResult.errors.length !== 1 ? 's' : ''} found
-                  </div>
-                )}
-                {parseResult.warnings.length > 0 && (
-                  <div className="flex items-center gap-2 text-sm font-medium text-yellow-600">
-                    <AlertCircle className="w-4 h-4" />
-                    {parseResult.warnings.length} warning{parseResult.warnings.length !== 1 ? 's' : ''}
-                  </div>
-                )}
+                <div className="text-xs text-gray-600">
+                  File size: {(file.size / 1024).toFixed(2)} KB
+                  {parsedData.length > 0 && ` • ${parsedData.length} row${parsedData.length !== 1 ? 's' : ''} found`}
+                </div>
               </div>
-
-              {/* Errors */}
-              {parseResult.errors.length > 0 && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="text-sm font-semibold text-red-900 mb-2">Errors:</div>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {parseResult.errors.map((error, index) => (
-                      <div key={index} className="text-xs text-red-700">
-                        Row {error.row}, {error.field}: {error.message}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Warnings */}
-              {parseResult.warnings.length > 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <div className="text-sm font-semibold text-yellow-900 mb-2">Warnings:</div>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {parseResult.warnings.map((warning, index) => (
-                      <div key={index} className="text-xs text-yellow-700">
-                        {warning}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Preview Table */}
-              {parseResult.data.length > 0 && (
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700 border-b border-gray-200">
-                    Preview (first 5 rows)
+              
+              {/* Preview of parsed data */}
+              {parsedData.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="text-sm font-semibold text-blue-900 mb-2">
+                    Preview ({Math.min(parsedData.length, 5)} of {parsedData.length} rows):
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b border-gray-200">
+                    <table className="w-full text-xs">
+                      <thead className="bg-blue-100">
                         <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Name</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Phone</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Service</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Status</th>
+                          {Object.keys(parsedData[0] || {}).slice(0, 5).map((key) => (
+                            <th key={key} className="px-2 py-1 text-left font-medium text-blue-900">
+                              {key}
+                            </th>
+                          ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {parseResult.data.slice(0, 5).map((row, index) => (
-                          <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-3 py-2 text-gray-900">{row.name}</td>
-                            <td className="px-3 py-2 text-gray-600">{row.phone}</td>
-                            <td className="px-3 py-2 text-gray-600">{row.service}</td>
-                            <td className="px-3 py-2">
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                row.status === 'Approved' ? 'bg-green-100 text-green-800' :
-                                row.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                                row.status === 'Rejected' ? 'bg-red-100 text-red-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {row.status || 'Draft'}
-                              </span>
-                            </td>
+                      <tbody className="divide-y divide-blue-200">
+                        {parsedData.slice(0, 5).map((row, idx) => (
+                          <tr key={idx}>
+                            {Object.values(row).slice(0, 5).map((value: any, colIdx) => (
+                              <td key={colIdx} className="px-2 py-1 text-blue-800">
+                                {String(value || '').substring(0, 30)}
+                              </td>
+                            ))}
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    {parseResult.data.length > 5 && (
-                      <div className="px-4 py-2 text-xs text-gray-500 bg-gray-50 border-t border-gray-200">
-                        ... and {parseResult.data.length - 5} more row{parseResult.data.length - 5 !== 1 ? 's' : ''}
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
 
-              {/* CSV Format Help */}
+              {/* Excel Format Help */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="text-sm font-semibold text-blue-900 mb-2">Expected CSV Format:</div>
+                <div className="text-sm font-semibold text-blue-900 mb-2">Expected Excel Format:</div>
                 <div className="text-xs text-blue-800 space-y-1">
                   <div>Required columns: <strong>Name</strong>, <strong>Phone</strong>, <strong>Service</strong>, <strong>Address</strong></div>
-                  <div>Optional columns: <strong>Approved Credits</strong>, <strong>Used Credits</strong>, <strong>Remaining Credits</strong>, <strong>Status</strong>, <strong>Preferred Staff</strong> (comma-separated), <strong>Preferred Days</strong> (comma-separated)</div>
+                  <div>Optional columns: <strong>Approved Credits</strong>, <strong>Used Credits</strong>, <strong>Remaining Credits</strong>, <strong>Status</strong>, <strong>Preferred Staff</strong>, <strong>Preferred Days</strong></div>
+                  <div className="mt-2 text-blue-700">
+                    The backend will parse the Excel file and validate the data. Results will be shown after import.
+                  </div>
                 </div>
               </div>
             </div>
@@ -263,10 +240,10 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
           </Button>
           <Button
             onClick={handleImport}
-            disabled={!parseResult || parseResult.data.length === 0 || parseResult.errors.length > 0 || isProcessing}
+            disabled={!file || isProcessing}
             className="bg-gray-900 text-white hover:bg-gray-800"
           >
-            {isProcessing ? 'Importing...' : `Import ${parseResult?.data.length || 0} Request${parseResult?.data.length !== 1 ? 's' : ''}`}
+            {isProcessing ? 'Importing...' : 'Import Excel File'}
           </Button>
         </DialogFooter>
       </DialogContent>

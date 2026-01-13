@@ -1,169 +1,103 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, XCircle, Loader2, ArrowLeft, Download, FileSpreadsheet } from 'lucide-react';
 import { DashboardHeader } from '@/components/layout/DashboardHeader';
 import type { DispatchProgress, DispatchProgressItem, DispatchProgressStatus } from '@/lib/types/dispatchLog.types';
 import type { ServiceRequest } from '@/lib/types/serviceRequest.types';
-import { updateApprovedUserCredit } from '@/lib/actions/approvedUserCredits.actions';
 
 export default function AutoDispatchProgressPage() {
   const router = useRouter();
   const [progress, setProgress] = useState<DispatchProgress | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Simulate dispatch progress with delays
-  const simulateDispatchProgress = useCallback(async (initialProgress: DispatchProgress, services: ServiceRequest[]) => {
 
-    // Process each item with delays
-    initialProgress.items.forEach((item, index) => {
-      setTimeout(async () => {
-        // Get the service for this item
-        const service = services[index];
-        
-        // Mock behavior: first service (index 0) completes, second (index 1) fails, rest succeed
-        const isFirst = index === 0;
-        const isSecond = index === 1;
-        
-        let updatedItem: DispatchProgressItem;
-        
-        if (isFirst) {
-          // First service - COMPLETE
-          updatedItem = {
-            ...item,
-            status: 'Completed',
-            assignedProvider: `Provider ${index + 1}`,
-            completedAt: new Date().toISOString(),
-          };
-        } else if (isSecond) {
-          // Second service - FAIL
-          updatedItem = {
-            ...item,
-            status: 'Failed',
-            failureReason: 'No available providers in the service area',
-          };
-        } else {
-          // All other services - COMPLETE
-          updatedItem = {
-            ...item,
-            status: 'Completed',
-            assignedProvider: `Provider ${index + 1}`,
-            completedAt: new Date().toISOString(),
-          };
-        }
-
-        // Update credits when service is successfully dispatched
-        if (updatedItem.status === 'Completed' && service?.userId && service?.serviceId && service?.approvedUserCreditId) {
-          try {
-            // Deduct 1 credit per service (or use actual credit deduction amount from service)
-            const creditDeduction = 1; // TODO: Get actual credit deduction from service request
-            
-            await updateApprovedUserCredit({
-              Id: service.approvedUserCreditId,
-              UserId: service.userId,
-              ServiceId: service.serviceId,
-              ApprovedCredits: service.credits.approved,
-              UsedCredits: (service.credits.used || 0) + creditDeduction,
-              RemainingCredits: (service.credits.remaining || 0) - creditDeduction,
-              StartDate: service.credits.approved ? new Date().toISOString() : new Date().toISOString(), // Use actual StartDate from credit if available
-              EndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // Use actual EndDate from credit if available
-              RecurringPeriod: 1, // Use actual RecurringPeriod from credit if available
-              IsActive: true,
-            });
-            console.log(`Credits updated for service ${service.id}`);
-          } catch (error) {
-            console.error('Failed to update credits after dispatch:', error);
-            // Don't fail the dispatch if credit update fails, just log it
-          }
-        }
-
-        setProgress((prev) => {
-          if (!prev) return null;
-          
-          // Create a new items array with updated item
-          const updatedItems = prev.items.map((prevItem, prevIndex) => {
-            if (prevIndex === index) {
-              return updatedItem;
-            }
-            return prevItem;
-          });
-
-          // Check if all items are done (not processing anymore)
-          const allDone = updatedItems.every((i) => i.status !== 'Processing');
-          const isComplete = allDone;
-
-          return {
-            ...prev,
-            items: updatedItems,
-            isComplete,
-          };
-        });
-      }, (index + 1) * 2000); // 2 seconds per item
-    });
-  }, [router]);
-
-  // Mock service requests data (using selected IDs from router state)
+  // Load real API results from sessionStorage
   useEffect(() => {
     // Prevent re-initialization if already initialized
     if (isInitialized) return;
 
-    // Get service IDs from sessionStorage (passed from service requests page)
+    // Get service requests and API response from sessionStorage
     const serviceIdsJson = sessionStorage.getItem('autoDispatchServiceIds');
-    if (!serviceIdsJson) {
+    const servicesJson = sessionStorage.getItem('autoDispatchServices');
+    const responseJson = sessionStorage.getItem('autoDispatchResponse');
+    
+    if (!serviceIdsJson || !servicesJson) {
       router.push('/scheduler/service-requests');
       return;
     }
 
     try {
       const serviceIds: string[] = JSON.parse(serviceIdsJson);
-      setIsInitialized(true); // Mark as initialized before removing from storage
-      // Don't remove sessionStorage here - keep it so page can stay after completion
+      const services: ServiceRequest[] = JSON.parse(servicesJson);
+      const apiResponse = responseJson ? JSON.parse(responseJson) : null;
+      
+      setIsInitialized(true);
 
-      // Create mock service requests based on selected IDs
-      const mockServices: ServiceRequest[] = serviceIds.map((id, index) => ({
-        id,
-        name: `Customer ${index + 1}`,
-        phone: `+1 (555) ${100 + index}-${1000 + index}`,
-        service: `Service Type ${index + 1}`,
-        address: `${100 + index} Main Street, City, State ${10000 + index}`,
-        credits: {
-          approved: 500 + index * 100,
-          used: 100 + index * 50,
-          remaining: 400 + index * 50,
-        },
-        preferredStaff: [`Provider ${index + 1}`],
-        preferredDays: ['Monday', 'Wednesday', 'Friday'],
-        status: 'Approved' as const,
-        userId: 1000 + index,
-        serviceId: 2000 + index,
-        approvedUserCreditId: 3000 + index, // Mock credit ID for testing
-      }));
+      // Create progress items from real service requests
+      const initialItems: DispatchProgressItem[] = services.map((service) => {
+        // Determine status based on API response
+        // If API was successful, mark as completed; otherwise check for errors
+        let status: DispatchProgressStatus = 'Processing';
+        
+        if (apiResponse) {
+          if (apiResponse.Status === 201) {
+            // Success - mark as completed
+            status = 'Completed';
+          } else {
+            // Failed - mark as failed
+            status = 'Failed';
+          }
+        }
 
-      // Create initial progress state
-      const initialItems: DispatchProgressItem[] = mockServices.map((service) => ({
-        serviceId: service.id,
-        serviceName: service.service,
-        customerName: service.name,
-        status: 'Processing' as DispatchProgressStatus,
-      }));
+        return {
+          serviceId: service.id,
+          serviceName: service.service,
+          customerName: service.name,
+          status,
+          assignedProvider: status === 'Completed' ? 'Provider Assigned' : undefined,
+          completedAt: status === 'Completed' ? new Date().toISOString() : undefined,
+          failureReason: status === 'Failed' ? (apiResponse?.Message || 'Auto Dispatch failed') : undefined,
+        };
+      });
 
       const initialProgress: DispatchProgress = {
         id: `progress-${Date.now()}`,
         startedAt: new Date().toISOString(),
         items: initialItems,
-        isComplete: false,
+        isComplete: apiResponse ? true : false, // Mark complete if we have API response
       };
 
       setProgress(initialProgress);
 
-      // Simulate dispatch progress with mock data
-      simulateDispatchProgress(initialProgress, mockServices);
+      // If API response shows errors, update items accordingly
+      if (apiResponse && apiResponse.data?.ErrorLogs && Array.isArray(apiResponse.data.ErrorLogs)) {
+        // Update failed items with error details
+        const errorLogs = apiResponse.data.ErrorLogs;
+        setProgress((prev) => {
+          if (!prev) return null;
+          const updatedItems = prev.items.map((item, index) => {
+            if (errorLogs[index]) {
+              return {
+                ...item,
+                status: 'Failed' as DispatchProgressStatus,
+                failureReason: errorLogs[index],
+              };
+            }
+            return item;
+          });
+          return {
+            ...prev,
+            items: updatedItems,
+          };
+        });
+      }
     } catch (error) {
-      console.error('Failed to parse service IDs:', error);
+      console.error('Failed to parse dispatch data:', error);
       router.push('/scheduler/service-requests');
     }
-  }, [router, simulateDispatchProgress, isInitialized]);
+  }, [router, isInitialized]);
 
   const getStatusIcon = (status: DispatchProgressStatus) => {
     switch (status) {

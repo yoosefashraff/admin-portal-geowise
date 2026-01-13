@@ -4,16 +4,29 @@ import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } f
 function getClientApiUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   
-  // In production, this should never be localhost or netlify.app
-  if (typeof window !== 'undefined' && envUrl) {
-    if (envUrl.includes('localhost') || envUrl.includes('netlify.app')) {
-      console.error('❌ Invalid API URL in client bundle:', envUrl);
-      console.error('This indicates NEXT_PUBLIC_API_URL was set incorrectly during build.');
-      console.error('Please rebuild with NEXT_PUBLIC_API_URL=https://gw5cn.geowise.ai');
+  // In development (localhost), use Next.js proxy to avoid CORS issues
+  // In production, use direct backend URL (CORS is configured)
+  if (typeof window !== 'undefined') {
+    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    if (isDevelopment) {
+      // Use relative path which will be proxied by Next.js rewrites
+      return '/api';
+    }
+    
+    // In production, validate the API URL
+    if (envUrl) {
+      if (envUrl.includes('localhost') || envUrl.includes('netlify.app')) {
+        console.error('❌ Invalid API URL in client bundle:', envUrl);
+        console.error('This indicates NEXT_PUBLIC_API_URL was set incorrectly during build.');
+        console.error('Please rebuild with NEXT_PUBLIC_API_URL=https://gw5cn.geowise.ai');
+      }
+      return envUrl;
     }
   }
   
-  return envUrl || 'http://localhost:3000/api';
+  // Fallback: use environment URL or default
+  return envUrl || 'https://gw5cn.geowise.ai';
 }
 
 const API_BASE_URL = getClientApiUrl();

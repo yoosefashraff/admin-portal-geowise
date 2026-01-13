@@ -8,10 +8,18 @@ import ServicesRequestsTable from '@/components/service-requests/ServicesRequest
 import LogsTable from '@/components/service-requests/LogsTable'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import type { ServiceRequest } from '@/lib/types/serviceRequest.types'
 import type { DispatchLog } from '@/lib/types/dispatchLog.types'
-import { fetchServiceRequests, fetchDispatchLogs } from '@/lib/actions/serviceRequests.actions'
-import { listApprovedUserCredits } from '@/lib/actions/approvedUserCredits.actions'
+import { fetchServiceRequests, fetchDispatchLogs, fetchImportedServiceRequests } from '@/lib/actions/serviceRequests.actions'
+import { listApprovedUserCredits, generateBookings } from '@/lib/actions/approvedUserCredits.actions'
 import { useAuthStore } from '@/lib/store/authStore'
 import { toast } from 'sonner'
 import { ServiceRequestsSkeleton } from '@/components/skeleton/ServiceRequestsSkeleton'
@@ -33,56 +41,75 @@ export default function ServiceRequestsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
+  const [isRunningAutoDispatch, setIsRunningAutoDispatch] = useState(false)
   const itemsPerPage = 10
 
   // Fetch service requests from API
-  const loadServiceRequests = async () => {
-    if (!user) return
-    
-    setIsLoading(true)
-    setError(null)
-    try {
-      const response = await fetchServiceRequests(
-        undefined,
-        undefined,
-        false,
-        user.UserID
-      )
+    const loadServiceRequests = async () => {
+      if (!user) return
       
-      if (response.Status !== 201) {
-        // Check if it's an authentication error
-        if (response.Status === 401 || response.Status === 403) {
-          toast.error('Authentication failed. Please log in again.')
-          router.push('/login')
-          return
-        }
-        throw new Error(response.Message || 'Failed to fetch service requests')
-      }
-
-      // Fetch user credits to merge with service requests
-      let creditsMap = new Map<number, { approved: number; used: number; remaining: number; creditId?: number }>()
+      setIsLoading(true)
+      setError(null)
       try {
-        const creditsResponse = await listApprovedUserCredits({ IsActive: true })
-        if (creditsResponse.Status === 201 && creditsResponse.data && Array.isArray(creditsResponse.data)) {
-          creditsResponse.data.forEach((credit) => {
-            if (credit.UserId && credit.ServiceId) {
-              // Use UserId as key to map credits to bookings
-              creditsMap.set(credit.UserId, {
-                approved: credit.ApprovedCredits,
-                used: credit.UsedCredits || 0,
-                remaining: credit.RemainingCredits || 0,
-                creditId: credit.Id,
-              })
-            }
-          })
+        const response = await fetchServiceRequests(
+          undefined,
+          undefined,
+          false,
+          user.UserID
+        )
+        
+        if (response.Status !== 201) {
+          // Check if it's an authentication error
+          if (response.Status === 401 || response.Status === 403) {
+            toast.error('Authentication failed. Please log in again.')
+            router.push('/login')
+            return
+          }
+          throw new Error(response.Message || 'Failed to fetch service requests')
         }
-      } catch (creditsError) {
-        // Only log if it's not a JSON parsing error (which is expected if API returns HTML)
-        if (creditsError instanceof SyntaxError && creditsError.message?.includes('JSON')) {
-          console.warn('API returned HTML instead of JSON (may need authentication or correct endpoint):', creditsError.message)
+
+        // Fetch user credits to merge with service requests
+        let creditsMap = new Map<number, { approved: number; used: number; remaining: number; creditId?: number }>()
+        try {
+          const creditsResponse = await listApprovedUserCredits({ IsActive: true })
+          if (creditsResponse.Status === 201 && creditsResponse.data && Array.isArray(creditsResponse.data)) {
+            creditsResponse.data.forEach((credit) => {
+              if (credit.UserId && credit.ServiceId) {
+                // Use UserId as key to map credits to bookings
+                creditsMap.set(credit.UserId, {
+                  approved: credit.ApprovedCredits,
+                  used: credit.UsedCredits || 0,
+                  remaining: credit.RemainingCredits || 0,
+                  creditId: credit.Id,
+                })
+              }
+            })
+          }
+        } catch (creditsError) {
+          // Only log if it's not a JSON parsing error (which is expected if API returns HTML)
+          if (creditsError instanceof SyntaxError && creditsError.message?.includes('JSON')) {
+            console.warn('API returned HTML instead of JSON (may need authentication or correct endpoint):', creditsError.message)
+          } else {
+            console.warn('Failed to fetch credits, continuing without credit data:', creditsError)
+          }
+        }
+
+      // Also fetch imported service requests (before they're converted to bookings)
+      let importedRequests: any[] = []
+      try {
+        console.log('Attempting to fetch imported service requests from API...')
+        const importedResponse = await fetchImportedServiceRequests()
+        if (importedResponse.Status === 201 && importedResponse.data && Array.isArray(importedResponse.data)) {
+          importedRequests = importedResponse.data
+          console.log(`✅ Found ${importedRequests.length} imported service requests from API`)
+          if (importedRequests.length > 0) {
+            console.log('Sample imported request:', importedRequests[0])
+          }
         } else {
-          console.warn('Failed to fetch credits, continuing without credit data:', creditsError)
+          console.log('⚠️ No imported service requests found in API response:', importedResponse)
         }
+      } catch (importedError) {
+        console.warn('Could not fetch imported service requests:', importedError)
       }
 
       // Map API response to ServiceRequest format
@@ -103,6 +130,23 @@ export default function ServiceRequestsPage() {
           })
         }
       })
+      
+      // Add imported requests to the list (they might be in a different format)
+      if (importedRequests.length > 0) {
+        importedRequests.forEach((imported: any) => {
+          // Map imported request to callout format if needed
+          allCallouts.push({
+            ...imported,
+            Id: imported.Id || imported.id || `imported-${Date.now()}-${Math.random()}`,
+            Customer: imported.Name || imported.name || imported.Customer,
+            ServiceName: imported.Service || imported.service || imported.ServiceName,
+            Address: imported.Address || imported.address || '',
+            PhoneNumber: imported.Phone || imported.phone || imported.PhoneNumber || '',
+            Status: imported.Status || imported.status || 'Pending',
+            IsImported: true, // Flag to identify imported requests
+          })
+        })
+      }
       
       // Log first callout to debug field names
       if (allCallouts.length > 0) {
@@ -131,9 +175,9 @@ export default function ServiceRequestsPage() {
         // Since credits are mapped by UserId, and callouts might not have direct userId,
         // we'll use ProviderId as a fallback
         const userId = callout.UserId || callout.userId || callout.UserID || providerId
-        const creditInfo = userId && creditsMap.has(userId) 
-          ? creditsMap.get(userId)! 
-          : { approved: 0, used: 0, remaining: 0 }
+          const creditInfo = userId && creditsMap.has(userId) 
+            ? creditsMap.get(userId)! 
+            : { approved: 0, used: 0, remaining: 0 }
 
         // Determine status - Callouts are typically "Approved" or "Confirmed" when they appear
         // If there's a status field, use it; otherwise default to "Approved" for callouts
@@ -152,25 +196,25 @@ export default function ServiceRequestsPage() {
           }
         }
 
-        return {
+          return {
           id: String(calloutId),
           name: customerName || 'Unknown Customer',
           phone: phone || '',
           service: serviceName || 'Unknown Service',
           address: address || '',
-          credits: {
-            approved: creditInfo.approved,
-            used: creditInfo.used,
-            remaining: creditInfo.remaining,
-          },
+            credits: {
+              approved: creditInfo.approved,
+              used: creditInfo.used,
+              remaining: creditInfo.remaining,
+            },
           preferredStaff: providerName ? [providerName] : (callout.PreferredStaff || callout.preferredStaff || []),
           preferredDays: callout.PreferredDays || callout.preferredDays || [],
           status: normalizedStatus,
-          userId: userId,
+            userId: userId,
           serviceId: callout.ServiceId || callout.serviceId || undefined,
-          approvedUserCreditId: creditInfo.creditId,
-        }
-      })
+            approvedUserCreditId: creditInfo.creditId,
+          }
+        })
 
       // Merge with pending requests from sessionStorage (newly created)
       const pendingRequests = sessionStorage.getItem('pendingServiceRequests');
@@ -192,16 +236,32 @@ export default function ServiceRequestsPage() {
         }
       }
 
+      // Log requests for debugging
+      console.log('📊 Loaded service requests:', {
+        total: allRequests.length,
+        fromBookings: allCallouts.length - importedRequests.length,
+        fromImported: importedRequests.length,
+        sampleRequest: allRequests.length > 0 ? allRequests[0] : null,
+        requestNames: allRequests.map(r => r.name).slice(0, 10)
+      })
+
       // Set requests (empty array if no data)
       setRequests(allRequests)
-    } catch (err) {
-      console.error('Failed to load service requests:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load service requests')
+      
+      // If we have imported requests but they're not showing, log a warning
+      if (importedRequests.length > 0 && allRequests.length === 0) {
+        console.warn('⚠️ Imported requests were fetched but not mapped correctly. Check field mapping.')
+      } else if (importedRequests.length === 0) {
+        console.log('ℹ️ No imported service requests found. They may need to be fetched via a different endpoint or converted to bookings first.')
+      }
+      } catch (err) {
+        console.error('Failed to load service requests:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load service requests')
       setRequests([]) // Set to empty array on error
-    } finally {
-      setIsLoading(false)
+      } finally {
+        setIsLoading(false)
+      }
     }
-  }
 
   // Fetch service requests on mount and when user changes
   useEffect(() => {
@@ -308,15 +368,21 @@ export default function ServiceRequestsPage() {
 
   // Filter requests based on search query
   const filteredRequests = useMemo(() => {
-    if (!searchQuery.trim()) return requests
+    let filtered = requests
+
+    // Filter by search query
+    if (searchQuery.trim()) {
     const query = searchQuery.toLowerCase()
-    return requests.filter(
+      filtered = filtered.filter(
       (req) =>
         req.name.toLowerCase().includes(query) ||
         req.service.toLowerCase().includes(query) ||
         req.phone.includes(query) ||
         req.address.toLowerCase().includes(query)
     )
+    }
+
+    return filtered
   }, [requests, searchQuery])
 
   // Paginate requests
@@ -353,17 +419,108 @@ export default function ServiceRequestsPage() {
     }
   }
 
-  // Handle Run Auto Dispatch
-  const handleRunAutoDispatch = () => {
+  // Handle Run Auto Dispatch - calls real API
+  const handleRunAutoDispatch = async () => {
     const selectedServices = requests.filter((r) => selectedIds.has(r.id) && r.status === 'Approved')
-    if (selectedServices.length === 0) return
+    if (selectedServices.length === 0) {
+      toast.error('Please select at least one approved service request')
+      return
+    }
 
-    // Store selected service IDs in sessionStorage for the progress page
-    const serviceIds = selectedServices.map((s) => s.id)
-    sessionStorage.setItem('autoDispatchServiceIds', JSON.stringify(serviceIds))
+    setIsRunningAutoDispatch(true)
+    try {
+      // Get credit IDs from selected service requests
+      const creditIds: number[] = []
+      selectedServices.forEach((service) => {
+        if (service.approvedUserCreditId) {
+          creditIds.push(service.approvedUserCreditId)
+        }
+      })
 
-    // Navigate to progress page
-    router.push('/scheduler/auto-dispatch/progress')
+      // If no credit IDs found from service requests, use ALL available credits with remaining balance
+      // The backend will match them to imported records automatically
+      if (creditIds.length === 0) {
+        console.log('No credit IDs found in selected services, fetching all available credits...')
+        
+        // Fetch all active credits with remaining balance
+        const creditsResponse = await listApprovedUserCredits({ IsActive: true })
+        if (creditsResponse.Status === 201 && creditsResponse.data && Array.isArray(creditsResponse.data)) {
+          // First, try to match by userId/serviceId for selected services
+          selectedServices.forEach((service) => {
+            const matchingCredit = creditsResponse.data.find(
+              (credit) => 
+                credit.UserId === service.userId && 
+                credit.ServiceId === service.serviceId &&
+                (credit.RemainingCredits || 0) > 0
+            )
+            if (matchingCredit?.Id) {
+              creditIds.push(matchingCredit.Id)
+            }
+          })
+          
+          // If still no matches, use ALL credits with remaining balance
+          if (creditIds.length === 0) {
+            console.log('No matching credits found, using all credits with remaining balance')
+            const allCreditsWithRemaining = creditsResponse.data.filter(
+              (credit) => credit.Id && (credit.RemainingCredits || 0) > 0
+            )
+            creditIds.push(...allCreditsWithRemaining.map(c => c.Id!))
+          }
+        }
+      }
+
+      if (creditIds.length === 0) {
+        toast.error('No credits with remaining balance found. Please create credits in the Credits page first.')
+        console.error('Auto Dispatch failed: No credits found', {
+          selectedServices: selectedServices.map(s => ({
+            id: s.id,
+            name: s.name,
+            userId: s.userId,
+            serviceId: s.serviceId,
+            approvedUserCreditId: s.approvedUserCreditId
+          }))
+        })
+        setIsRunningAutoDispatch(false)
+        return
+      }
+
+      // Remove duplicates
+      const uniqueCreditIds = [...new Set(creditIds)]
+
+      console.log('Running Auto Dispatch with credit IDs:', uniqueCreditIds)
+      console.log('Selected services:', selectedServices.map(s => ({ id: s.id, name: s.name, creditId: s.approvedUserCreditId })))
+
+      // Call the real API with timeout handling
+      console.log('Calling generateBookings API...')
+      const startTime = Date.now()
+      const response = await generateBookings(uniqueCreditIds)
+      const duration = Date.now() - startTime
+      console.log(`GenerateBookings API call completed in ${duration}ms`, response)
+
+      // Store selected service requests and API response for progress page
+      sessionStorage.setItem('autoDispatchServiceIds', JSON.stringify(selectedServices.map((s) => s.id)))
+      sessionStorage.setItem('autoDispatchResponse', JSON.stringify(response))
+      sessionStorage.setItem('autoDispatchServices', JSON.stringify(selectedServices))
+
+      if (response.Status === 201) {
+        const successCount = response.data?.bookingsCreated || response.data?.success || 0
+        toast.success(`Auto Dispatch started. ${successCount} booking${successCount !== 1 ? 's' : ''} will be created.`)
+        
+        // Navigate to progress page
+        router.push('/scheduler/auto-dispatch/progress')
+      } else {
+        const errorMessage = response.Message || 'Failed to start Auto Dispatch'
+        toast.error(errorMessage)
+        if (response.data?.ErrorLogs && response.data.ErrorLogs.length > 0) {
+          console.error('Error logs:', response.data.ErrorLogs)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to run Auto Dispatch:', error)
+      toast.error('Failed to run Auto Dispatch. Please try again.')
+    } finally {
+      setIsRunningAutoDispatch(false)
+    }
   }
 
   // Get selected approved services count
@@ -387,11 +544,26 @@ export default function ServiceRequestsPage() {
     }
   }
 
-  // Handle CSV import - reload service requests from API
-  const handleCSVImport = () => {
-    // Reload service requests from API after successful import
-    loadServiceRequests()
+  // Handle CSV import - always reload from API to get stored records
+  const handleCSVImport = async (importedData?: any[]) => {
+    console.log('handleCSVImport called', {
+      hasImportedData: !!importedData,
+      importedDataLength: importedData?.length || 0
+    })
+    
+    // Always reload from API after successful import
+    // The backend stores imported records, so we should fetch them from the API
+    console.log('Reloading service requests from API after import...')
+    await loadServiceRequests()
+    
+    // Show success message
+    if (importedData && Array.isArray(importedData) && importedData.length > 0) {
+      toast.success(`Successfully imported ${importedData.length} service request${importedData.length !== 1 ? 's' : ''}. Refreshing list...`)
+    } else {
+      toast.success('Import completed. Refreshing list...')
+    }
   }
+
 
   // Handle CSV export
   const handleCSVExport = () => {
@@ -489,6 +661,7 @@ export default function ServiceRequestsPage() {
 
       {/* Search and Actions */}
       <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-4 flex-1">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
@@ -498,6 +671,7 @@ export default function ServiceRequestsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button 
@@ -559,9 +733,17 @@ export default function ServiceRequestsPage() {
             </div>
             <Button
               onClick={handleRunAutoDispatch}
-              className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg transition-colors shadow-sm hover:opacity-90"
+              disabled={isRunningAutoDispatch}
+              className="px-4 py-2 text-sm font-medium text-white bg-gray-900 rounded-lg transition-colors shadow-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Run Auto Dispatch
+              {isRunningAutoDispatch ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Running...
+                </>
+              ) : (
+                'Run Auto Dispatch'
+              )}
             </Button>
           </div>
         </div>
@@ -690,6 +872,7 @@ export default function ServiceRequestsPage() {
         onOpenChange={setIsImportDialogOpen}
         onImport={handleCSVImport}
       />
+
     </div>
   )
 }
