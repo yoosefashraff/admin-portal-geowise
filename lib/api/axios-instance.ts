@@ -54,6 +54,22 @@ axiosInstance.interceptors.response.use(
   async (error: AxiosError) => {
     const status = error.response?.status;
 
+    // Handle CORS errors specifically
+    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+      console.error('🚫 CORS Error: Request blocked by browser CORS policy', {
+        origin,
+        target: error.config?.url ? `${error.config.baseURL}${error.config.url}` : 'unknown',
+        message: 'The backend must allow CORS from this origin. Please verify backend CORS configuration includes:',
+        requiredHeaders: [
+          `Access-Control-Allow-Origin: ${origin}`,
+          'Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers: Content-Type, Authorization',
+          'Access-Control-Allow-Credentials: true'
+        ]
+      });
+    }
+
     if (status === 401 || status === 403) {
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
