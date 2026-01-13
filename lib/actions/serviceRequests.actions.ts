@@ -1,8 +1,80 @@
 "use server";
 
+import axios, { AxiosInstance } from "axios";
+import { cookies } from "next/headers";
 import serverAPI from "@/lib/api/axios-server";
 import { fetchBookings } from "./calendar.actions";
 import type { FetchBookingsParams } from "@/lib/types/calendar";
+
+/**
+ * Get API URL for service requests
+ * Uses NEXT_PUBLIC_SERVICE_REQUESTS_API_URL if set (for dev testing),
+ * otherwise falls back to NEXT_PUBLIC_API_URL (production)
+ */
+function getServiceRequestsApiUrl(): string {
+  const devUrl = process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
+  const prodUrl = process.env.NEXT_PUBLIC_API_URL;
+  
+  const apiUrl = devUrl || prodUrl || 'https://gw5cn.geowise.ai';
+  
+  // Remove trailing slash
+  const baseUrl = apiUrl.replace(/\/+$/, '');
+  
+  // Log which environment is being used
+  if (typeof window === 'undefined') {
+    console.warn('🔧 Service Requests API URL:', {
+      usingDev: !!devUrl,
+      devUrl: devUrl || 'not set',
+      prodUrl: prodUrl || 'not set',
+      resolvedUrl: baseUrl
+    });
+  }
+  
+  return baseUrl;
+}
+
+/**
+ * Create a custom axios instance for service requests
+ * Uses dev environment if NEXT_PUBLIC_SERVICE_REQUESTS_API_URL is set
+ */
+async function createServiceRequestsAxios(): Promise<AxiosInstance> {
+  const baseURL = getServiceRequestsApiUrl();
+  const cookieStore = await cookies();
+  const token = cookieStore.get('xyzCompAuthorize')?.value;
+  
+  const instance = axios.create({
+    baseURL,
+    timeout: 60000, // 60 seconds for file uploads
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  
+  // Add request interceptor for authentication and FormData handling
+  instance.interceptors.request.use(
+    (config) => {
+      if (token && config.headers) {
+        config.headers.Cookie = `xyzCompAuthorize=${token}`;
+      }
+      
+      // Remove Content-Type for FormData - axios will set it automatically with boundary
+      if (config.data instanceof FormData && config.headers) {
+        delete config.headers['Content-Type'];
+      }
+      
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
+  
+  // Add response interceptor to return data directly
+  instance.interceptors.response.use(
+    (response) => response.data,
+    (error) => Promise.reject(error)
+  );
+  
+  return instance;
+}
 
 /**
  * Fetch service requests for the current date range
@@ -34,6 +106,9 @@ export async function fetchServiceRequests(
  * GET /ServiceRequests/List or similar endpoint
  */
 export async function fetchImportedServiceRequests(): Promise<{ Status: number; Message?: string; data?: any[] }> {
+  // Use custom axios instance for service requests (may point to dev environment)
+  const serviceRequestsAPI = await createServiceRequestsAxios();
+  
   // Try different possible endpoints for listing imported service requests
   const possibleEndpoints = [
     '/ApprovedUserCredits/Imported',  // Most likely - same controller as import
@@ -52,7 +127,7 @@ export async function fetchImportedServiceRequests(): Promise<{ Status: number; 
   for (const endpoint of possibleEndpoints) {
     try {
       console.log(`Trying to fetch imported service requests from: ${endpoint}`);
-      const response: any = await serverAPI.get(endpoint);
+      const response: any = await serviceRequestsAPI.get(endpoint);
       
       console.log(`Response from ${endpoint}:`, {
         Status: response.Status,
@@ -123,8 +198,9 @@ export async function importServiceRequests(
   formData: FormData
 ): Promise<{ Status: number; Message?: string; data?: { success: number; errors?: string[] } }> {
   try {
-    // Log the endpoint being called for debugging
-    const baseURL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api').replace(/\/+$/, '');
+    // Use custom axios instance for service requests (may point to dev environment)
+    const serviceRequestsAPI = await createServiceRequestsAxios();
+    const baseURL = getServiceRequestsApiUrl();
     
     // Try different possible endpoint paths (backend might use different naming)
     // Based on pattern: GenerateBookings is under /ApprovedUserCredits, so import might be too
@@ -142,16 +218,14 @@ export async function importServiceRequests(
       baseURL,
       fullUrl: `${baseURL}${endpoint}`,
       tryingEndpoints: possibleEndpoints,
+      usingDevEnvironment: !!process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL,
     });
     
-    const response: any = await serverAPI.post(
+    // For FormData, axios will automatically set Content-Type with boundary
+    // Don't set it manually as it will break the upload
+    const response: any = await serviceRequestsAPI.post(
       endpoint,
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      }
+      formData
     )
     
     // Log the full import response to see what it contains

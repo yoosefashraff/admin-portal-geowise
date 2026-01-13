@@ -78,54 +78,54 @@ export default function DateTimeSelectPage() {
     async function load(user : User) {
       try {
         setLoading(true);
-        const today = dayjs().format("YYYY-MM-DD");
-        const sixMonthsLater = dayjs().add(6, "month").format("YYYY-MM-DD");
+      const today = dayjs().format("YYYY-MM-DD");
+      const sixMonthsLater = dayjs().add(6, "month").format("YYYY-MM-DD");
         const response : {List : string[]} = await apiClient.post('/search/getbarberavilabelbookingdate',
-          {
-            BarberId: provider ? JSON.parse(provider).ProviderId : 0,
-            FromDate: today,
-            ToDate: sixMonthsLater,
-            ServiceZoneId: provider ? JSON.parse(provider).ServiceZoneId : 0,
-            AssociationType: 1,
-            CompanyAdminId: user.UserID,
-            TimeZone: timeZone || 'Europe/London'
-          }
-        );
-
-        if(!response?.List || response.List.length === 0){
-          setMonthGroup([]);
-          setCurrentMonth(null);
-          setLoading(false);
-          setTimeLoading(false);
-          toast.info('No available dates found for the selected provider and service. Please try selecting a different provider or service.');
-          return;
+        {
+          BarberId: provider ? JSON.parse(provider).ProviderId : 0,
+          FromDate: today,
+          ToDate: sixMonthsLater,
+          ServiceZoneId: provider ? JSON.parse(provider).ServiceZoneId : 0,
+          AssociationType: 1,
+          CompanyAdminId: user.UserID,
+          TimeZone: timeZone || 'Europe/London'
         }
+      );
 
-        // Set the available dates
-        setDateAvailable(response.List);
-        // Group the dates by month
-        const monthG = groupDatesByMonthArray(response.List);
-        // Set the month group
-        setMonthGroup(monthG);
-        // Set the first month as the current month
-        const monthFromDate = dayjs(barberDate || monthG[0].dates[0]).format("YYYY-MM");
-        const cm = monthG.find((m) => m.month === monthFromDate) || monthG[0];
-        setCurrentMonth(cm);
-        // Set the first date as the selected date
-        setSelectedDate( barberDate || monthG[0].dates[0]);
+      if(!response?.List || response.List.length === 0){
+        setMonthGroup([]);
+        setCurrentMonth(null);
+        setLoading(false);
+        setTimeLoading(false);
+          toast.info('No available dates found for the selected provider and service. Please try selecting a different provider or service.');
+        return;
+      }
 
-        setMonth(new Date(barberDate || monthG[0].dates[0]));
+      // Set the available dates
+      setDateAvailable(response.List);
+      // Group the dates by month
+      const monthG = groupDatesByMonthArray(response.List);
+      // Set the month group
+      setMonthGroup(monthG);
+      // Set the first month as the current month
+      const monthFromDate = dayjs(barberDate || monthG[0].dates[0]).format("YYYY-MM");
+      const cm = monthG.find((m) => m.month === monthFromDate) || monthG[0];
+      setCurrentMonth(cm);
+      // Set the first date as the selected date
+      setSelectedDate( barberDate || monthG[0].dates[0]);
 
-        setTimeout(() => {
-          daysSwiper.current?.slideTo(cm.dates.indexOf(barberDate || monthG[0].dates[0]), 0);
-        }, 100);
+      setMonth(new Date(barberDate || monthG[0].dates[0]));
+
+      setTimeout(() => {
+        daysSwiper.current?.slideTo(cm.dates.indexOf(barberDate || monthG[0].dates[0]), 0);
+      }, 100);
       } catch (error: any) {
         console.error('Error loading available dates:', error);
         toast.error(error?.message || 'Failed to load available dates. Please try again.');
         setMonthGroup([]);
         setCurrentMonth(null);
       } finally {
-        setLoading(false);
+      setLoading(false);
         setTimeLoading(false);
       }
     }
@@ -138,43 +138,43 @@ export default function DateTimeSelectPage() {
     if(selectedDate){
       async function loadTimeAvailability() {
         try {
-          setTimeLoading(true);
+        setTimeLoading(true);
 
-          let serviceId = 0;
-          const parsed = JSON.parse(service);
-          if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.Id) {
-            serviceId = parsed[0].Id;
-          }
-          if(!serviceId){
-            router.replace('/scheduler/select-service');
+        let serviceId = 0;
+        const parsed = JSON.parse(service);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0]?.Id) {
+          serviceId = parsed[0].Id;
+        }
+        if(!serviceId){
+          router.replace('/scheduler/select-service');
             return;
-          }
+        }
 
           const response : {List : string[]} = await apiClient.post('/search/getbarbertimeslotslist',
-            {
-              BarberId: provider ? JSON.parse(provider).ProviderId : 0,
-              Date: selectedDate || dayjs().format("YYYY-MM-DD"),
-              BookingType: 2,
-              ServiceId: serviceId,
-              Lat: location ? JSON.parse(location).Lat : 0,
-              Lng: location ? JSON.parse(location).Lng : 0,
-              AssociationType: 1,
-              CompanyAdminId: user?.UserID ?? 0,
-              TimeZone: timeZone || 'Europe/London'
-            }
-          );
-          if(!response?.List || response.List.length === 0){
-            setTimeSlots([]);
-            setTimeLoading(false);
-            toast.info('No available time slots for the selected date.');
-            return;
+          {
+            BarberId: provider ? JSON.parse(provider).ProviderId : 0,
+            Date: selectedDate || dayjs().format("YYYY-MM-DD"),
+            BookingType: 2,
+            ServiceId: serviceId,
+            Lat: location ? JSON.parse(location).Lat : 0,
+            Lng: location ? JSON.parse(location).Lng : 0,
+            AssociationType: 1,
+            CompanyAdminId: user?.UserID ?? 0,
+            TimeZone: timeZone || 'Europe/London'
           }
-          setTimeSlots(response.List);
-          setSelectedTime(timingSlot || response.List[0]);
+        );
+        if(!response?.List || response.List.length === 0){
+          setTimeSlots([]);
+          setTimeLoading(false);
+            toast.info('No available time slots for the selected date.');
+          return;
+        }
+        setTimeSlots(response.List);
+        setSelectedTime(timingSlot || response.List[0]);
 
-          setTimeout(() => {
-            timeSwiper.current?.slideTo(response.List.indexOf(timingSlot || response.List[0]), 0);
-          }, 100);
+        setTimeout(() => {
+          timeSwiper.current?.slideTo(response.List.indexOf(timingSlot || response.List[0]), 0);
+        }, 100);
         } catch (error: any) {
           console.error('Error loading time slots:', error);
           toast.error(error?.message || 'Failed to load time slots. Please try again.');
