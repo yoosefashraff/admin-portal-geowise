@@ -479,13 +479,15 @@ export async function generateBookings(
     console.log('🔧 Auto-Dispatch using Service Requests API URL (dev environment if configured)')
     
     // CRITICAL: Log where bookings will be created
+    // Note: Dev environment is for testing, but data should be treated as REAL (realistic locations, real data structure)
     console.warn('⚠️ AUTO-DISPATCH DATA STORAGE LOCATION:', {
-      environment: isUsingDev ? 'DEV' : 'PRODUCTION',
+      environment: isUsingDev ? 'DEV (Testing Environment)' : 'PRODUCTION',
       message: isUsingDev 
-        ? '✅ Bookings will be created on DEV environment (safe for testing)'
+        ? '✅ Bookings will be created on DEV environment (testing database, but data is REAL and realistic)'
         : '⚠️ Bookings will be created on PRODUCTION environment (use with caution!)',
       devUrl: process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
-      prodUrl: process.env.NEXT_PUBLIC_API_URL || 'not set'
+      prodUrl: process.env.NEXT_PUBLIC_API_URL || 'not set',
+      note: 'Dev environment uses separate database for testing, but data structure and locations are realistic'
     })
     
     // Add timeout to prevent hanging (60 seconds for booking generation)
