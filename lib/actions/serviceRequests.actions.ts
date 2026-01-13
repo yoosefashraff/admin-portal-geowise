@@ -215,12 +215,15 @@ export async function importServiceRequests(
     
     const endpoint = possibleEndpoints[0]; // Start with the most likely one
     const isUsingDev = !!process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
-    console.log('ServiceRequests Import API Request:', {
+    const fullUrl = `${baseURL}${endpoint}`;
+    
+    console.warn('📤 ServiceRequests Import API Request:', {
       endpoint,
       baseURL,
-      fullUrl: `${baseURL}${endpoint}`,
+      fullUrl,
       tryingEndpoints: possibleEndpoints,
       usingDevEnvironment: isUsingDev,
+      protocol: baseURL.startsWith('https') ? 'HTTPS' : 'HTTP',
     });
     
     // CRITICAL: Log where data will be stored
@@ -234,12 +237,33 @@ export async function importServiceRequests(
       prodUrl: process.env.NEXT_PUBLIC_API_URL || 'not set'
     });
     
+    console.warn('⏳ Starting import request to:', fullUrl);
+    const requestStartTime = Date.now();
+    
     // For FormData, axios will automatically set Content-Type with boundary
     // Don't set it manually as it will break the upload
-    const response: any = await serviceRequestsAPI.post(
-      endpoint,
-      formData
-    )
+    let response: any;
+    try {
+      response = await serviceRequestsAPI.post(
+        endpoint,
+        formData
+      );
+      const requestDuration = Date.now() - requestStartTime;
+      console.warn('✅ Import request completed in', requestDuration, 'ms');
+    } catch (requestError: any) {
+      const requestDuration = Date.now() - requestStartTime;
+      console.error('❌ Import request failed after', requestDuration, 'ms:', {
+        message: requestError.message,
+        code: requestError.code,
+        status: requestError.response?.status,
+        statusText: requestError.response?.statusText,
+        responseData: requestError.response?.data,
+        isTimeout: requestError.code === 'ECONNABORTED' || requestError.message?.includes('timeout'),
+        isNetworkError: requestError.code === 'ERR_NETWORK' || requestError.message === 'Network Error',
+        isRedirect: requestError.response?.status === 301 || requestError.response?.status === 302 || requestError.response?.status === 307 || requestError.response?.status === 308,
+      });
+      throw requestError; // Re-throw to be caught by outer catch block
+    }
     
     // Log the full import response to see what it contains
     console.log('📥 Import API Response (full):', JSON.stringify(response, null, 2))
@@ -269,14 +293,36 @@ export async function importServiceRequests(
     }
   } catch (err: any) {
     // Enhanced error logging
-    console.error('ServiceRequests Import Error:', {
+    console.error('❌ ServiceRequests Import Error:', {
       message: err.message,
+      code: err.code,
+      name: err.name,
       status: err.response?.status,
       statusText: err.response?.statusText,
       responseData: err.response?.data,
       requestUrl: err.config?.url,
-      fullUrl: err.config ? `${err.config.baseURL}${err.config.url}` : 'unknown'
+      requestBaseURL: err.config?.baseURL,
+      fullUrl: err.config ? `${err.config.baseURL}${err.config.url}` : 'unknown',
+      isTimeout: err.code === 'ECONNABORTED' || err.message?.includes('timeout'),
+      isNetworkError: err.code === 'ERR_NETWORK' || err.message === 'Network Error',
+      isRedirect: err.response?.status === 301 || err.response?.status === 302 || err.response?.status === 307 || err.response?.status === 308,
+      redirectLocation: err.response?.headers?.location,
     })
+    
+    // Handle redirects (HTTP to HTTPS, etc.)
+    if (err.response?.status === 301 || err.response?.status === 302 || err.response?.status === 307 || err.response?.status === 308) {
+      const redirectLocation = err.response?.headers?.location;
+      const attemptedUrl = err.config ? `${err.config.baseURL}${err.config.url}` : 'unknown';
+      console.error('🔄 Redirect detected:', {
+        from: attemptedUrl,
+        to: redirectLocation,
+        status: err.response?.status
+      });
+      return { 
+        Status: err.response?.status, 
+        Message: `Backend redirected request from ${attemptedUrl} to ${redirectLocation || 'unknown location'}. This may indicate the dev backend requires HTTPS or a different URL.` 
+      }
+    }
     
     // Handle 404 specifically
     if (err.response?.status === 404) {
@@ -284,6 +330,22 @@ export async function importServiceRequests(
       return { 
         Status: 404, 
         Message: `Import endpoint not found at ${attemptedUrl}. Please verify with the backend developer the exact endpoint path. Common paths: /ServiceRequests/import, /ServiceRequest/import, or /import` 
+      }
+    }
+    
+    // Handle timeout
+    if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+      return { 
+        Status: 408, 
+        Message: `Import request timed out. The dev backend (${err.config?.baseURL || 'unknown'}) may be slow or unresponsive. Please try again or contact the backend developer.` 
+      }
+    }
+    
+    // Handle network errors
+    if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
+      return { 
+        Status: 503, 
+        Message: `Cannot connect to dev backend (${err.config?.baseURL || 'unknown'}). Please verify the backend is running and accessible.` 
       }
     }
     
