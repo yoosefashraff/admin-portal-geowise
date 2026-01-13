@@ -24,10 +24,13 @@ const expiryDateSerial = excelDate(expiryDate);
 // These are actual residential/commercial areas in Riyadh, not test-only coordinates
 // The dev environment is for testing, but the data should be realistic
 // IMPORTANT: Address field is required for proper mapping - backend needs actual address strings
+// CRITICAL: Using unique phone numbers (9999xxxxx) and ID numbers (999xxxxxxx) to prevent
+// backend from matching to existing customers. Backend matches by phone/ID, so we need
+// numbers that don't exist in the system to preserve "Test Customer" names.
 const testData = [
   {
-    'Mr_no': '38523501',
-    'ID number ': '1005465001',
+    'Mr_no': '99923501',
+    'ID number ': '9995465001',
     'Patient_Name': 'Test Customer 1',
     'Approved Service': 'GP',
     'Approved_Count': 10,
@@ -40,15 +43,15 @@ const testData = [
     'Latitude': 24.7136,
     'Longitude': 46.6753,
     'Country_Code': 966,
-    'Mobile_Number': 5550101,
-    'File_Number': 16660,
-    'Insurance_Number': '38523501',
+    'Mobile_Number': 99990101, // Unique test phone number
+    'File_Number': 99960,
+    'Insurance_Number': '99923501',
     'Level_of_Care': 'PACT1',
     'Recurring period (Days)': 2
   },
   {
-    'Mr_no': '38523502',
-    'ID number ': '1005465002',
+    'Mr_no': '99923502',
+    'ID number ': '9995465002',
     'Patient_Name': 'Test Customer 2',
     'Approved Service': 'Nursing',
     'Approved_Count': 10,
@@ -61,15 +64,15 @@ const testData = [
     'Latitude': 24.6877,
     'Longitude': 46.7215,
     'Country_Code': 966,
-    'Mobile_Number': 5550102,
-    'File_Number': 16661,
-    'Insurance_Number': '38523502',
+    'Mobile_Number': 99990102, // Unique test phone number
+    'File_Number': 99961,
+    'Insurance_Number': '99923502',
     'Level_of_Care': 'LTCA',
     'Recurring period (Days)': 2
   },
   {
-    'Mr_no': '38523503',
-    'ID number ': '1005465003',
+    'Mr_no': '99923503',
+    'ID number ': '9995465003',
     'Patient_Name': 'Test Customer 3',
     'Approved Service': 'GP',
     'Approved_Count': 10,
@@ -82,15 +85,15 @@ const testData = [
     'Latitude': 24.7574,
     'Longitude': 46.6428,
     'Country_Code': 966,
-    'Mobile_Number': 5550103,
-    'File_Number': 16662,
-    'Insurance_Number': '38523503',
+    'Mobile_Number': 99990103, // Unique test phone number
+    'File_Number': 99962,
+    'Insurance_Number': '99923503',
     'Level_of_Care': 'PACT1',
     'Recurring period (Days)': 2
   },
   {
-    'Mr_no': '38523504',
-    'ID number ': '1005465004',
+    'Mr_no': '99923504',
+    'ID number ': '9995465004',
     'Patient_Name': 'Test Customer 4',
     'Approved Service': 'RT',
     'Approved_Count': 10,
@@ -103,15 +106,15 @@ const testData = [
     'Latitude': 24.6833,
     'Longitude': 46.6167,
     'Country_Code': 966,
-    'Mobile_Number': 5550104,
-    'File_Number': 16663,
-    'Insurance_Number': '38523504',
+    'Mobile_Number': 99990104, // Unique test phone number
+    'File_Number': 99963,
+    'Insurance_Number': '99923504',
     'Level_of_Care': 'LTCA',
     'Recurring period (Days)': 2
   },
   {
-    'Mr_no': '38523505',
-    'ID number ': '1005465005',
+    'Mr_no': '99923505',
+    'ID number ': '9995465005',
     'Patient_Name': 'Test Customer 5',
     'Approved Service': 'Nursing',
     'Approved_Count': 10,
@@ -124,9 +127,9 @@ const testData = [
     'Latitude': 24.6982,
     'Longitude': 46.6856,
     'Country_Code': 966,
-    'Mobile_Number': 5550105,
-    'File_Number': 16664,
-    'Insurance_Number': '38523505',
+    'Mobile_Number': 99990105, // Unique test phone number
+    'File_Number': 99964,
+    'Insurance_Number': '99923505',
     'Level_of_Care': 'PACT1',
     'Recurring period (Days)': 2
   }
