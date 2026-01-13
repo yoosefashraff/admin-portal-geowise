@@ -242,14 +242,16 @@ export async function importServiceRequests(
     });
     
     // CRITICAL: Log where data will be stored
+    // Note: Dev environment is for testing, but data should be treated as REAL (realistic locations, real data structure)
     console.warn('⚠️ IMPORT DATA STORAGE LOCATION:', {
-      environment: isUsingDev ? 'DEV' : 'PRODUCTION',
+      environment: isUsingDev ? 'DEV (Testing Environment)' : 'PRODUCTION',
       apiUrl: baseURL,
       message: isUsingDev 
-        ? '✅ Data will be stored on DEV environment (safe for testing)'
+        ? '✅ Data will be stored on DEV environment (testing database, but data is REAL and realistic)'
         : '⚠️ Data will be stored on PRODUCTION environment (use with caution!)',
       devUrl: process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
-      prodUrl: process.env.NEXT_PUBLIC_API_URL || 'not set'
+      prodUrl: process.env.NEXT_PUBLIC_API_URL || 'not set',
+      note: 'Dev environment uses separate database for testing, but data structure and locations are realistic'
     });
     
     console.warn('⏳ Starting import request to:', fullUrl);
