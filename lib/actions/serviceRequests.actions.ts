@@ -36,8 +36,9 @@ function getServiceRequestsApiUrl(): string {
 /**
  * Create a custom axios instance for service requests
  * Uses dev environment if NEXT_PUBLIC_SERVICE_REQUESTS_API_URL is set
+ * Exported for use in other actions (e.g., auto-dispatch)
  */
-async function createServiceRequestsAxios(): Promise<AxiosInstance> {
+export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
   const baseURL = getServiceRequestsApiUrl();
   const cookieStore = await cookies();
   const token = cookieStore.get('xyzCompAuthorize')?.value;

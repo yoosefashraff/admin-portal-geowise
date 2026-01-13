@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import serverAPI from "@/lib/api/axios-server";
+import { createServiceRequestsAxios } from "@/lib/actions/serviceRequests.actions";
 
 export interface ApprovedUserCredit {
   Id?: number
@@ -469,11 +470,16 @@ export async function generateBookings(
       }
     }
 
-    console.log('Calling GenerateBookings API with credit IDs:', creditIds)
+    console.log('Calling GenerateBookings API (Auto-Dispatch) with credit IDs:', creditIds)
+    
+    // Use service requests axios instance (supports dev environment)
+    // This ensures auto-dispatch uses the same dev environment as service requests import
+    const serviceRequestsAPI = await createServiceRequestsAxios()
+    console.log('🔧 Auto-Dispatch using Service Requests API URL (dev environment if configured)')
     
     // Add timeout to prevent hanging (60 seconds for booking generation)
     const response: any = await Promise.race([
-      serverAPI.post('/ApprovedUserCredits/GenerateBookings', {
+      serviceRequestsAPI.post('/ApprovedUserCredits/GenerateBookings', {
         CreditIds: creditIds
       }),
       new Promise((_, reject) => 
