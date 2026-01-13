@@ -214,12 +214,24 @@ export async function importServiceRequests(
     ];
     
     const endpoint = possibleEndpoints[0]; // Start with the most likely one
+    const isUsingDev = !!process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
     console.log('ServiceRequests Import API Request:', {
       endpoint,
       baseURL,
       fullUrl: `${baseURL}${endpoint}`,
       tryingEndpoints: possibleEndpoints,
-      usingDevEnvironment: !!process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL,
+      usingDevEnvironment: isUsingDev,
+    });
+    
+    // CRITICAL: Log where data will be stored
+    console.warn('⚠️ IMPORT DATA STORAGE LOCATION:', {
+      environment: isUsingDev ? 'DEV' : 'PRODUCTION',
+      apiUrl: baseURL,
+      message: isUsingDev 
+        ? '✅ Data will be stored on DEV environment (safe for testing)'
+        : '⚠️ Data will be stored on PRODUCTION environment (use with caution!)',
+      devUrl: process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
+      prodUrl: process.env.NEXT_PUBLIC_API_URL || 'not set'
     });
     
     // For FormData, axios will automatically set Content-Type with boundary

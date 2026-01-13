@@ -475,7 +475,18 @@ export async function generateBookings(
     // Use service requests axios instance (supports dev environment)
     // This ensures auto-dispatch uses the same dev environment as service requests import
     const serviceRequestsAPI = await createServiceRequestsAxios()
+    const isUsingDev = !!process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL
     console.log('🔧 Auto-Dispatch using Service Requests API URL (dev environment if configured)')
+    
+    // CRITICAL: Log where bookings will be created
+    console.warn('⚠️ AUTO-DISPATCH DATA STORAGE LOCATION:', {
+      environment: isUsingDev ? 'DEV' : 'PRODUCTION',
+      message: isUsingDev 
+        ? '✅ Bookings will be created on DEV environment (safe for testing)'
+        : '⚠️ Bookings will be created on PRODUCTION environment (use with caution!)',
+      devUrl: process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
+      prodUrl: process.env.NEXT_PUBLIC_API_URL || 'not set'
+    })
     
     // Add timeout to prevent hanging (60 seconds for booking generation)
     const response: any = await Promise.race([
