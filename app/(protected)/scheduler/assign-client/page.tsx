@@ -15,7 +15,7 @@ import { SchedulerSteps } from "@/components/layout/SchedulerSteps";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSchedulerStore } from "@/lib/store/schedulerStore";
-import { addCustomerBookings, listcustomerforscheduler, searchCompanyProvider } from "@/lib/actions/scheduler.actions";
+import { apiClient } from "@/lib/api/axios-instance";
 import { Customer, SchedulerData, SchedulerSubmitData } from "@/lib/types/scheduler.types";
 import ClientSkeleton from "@/components/skeleton/ClientSkeleton";
 import { useSessionStorage } from "@/lib/hooks/useSessionStorage";
@@ -52,11 +52,11 @@ export default function AssignClientPage(){
 
 	useEffect(() => {
 		async function load() {
-			const response = await listcustomerforscheduler(
-				{
+			const response = await apiClient.get<{Response: Customer[]}>('/company/listcustomerforscheduler', {
+				params: {
 					providerId: provider ? JSON.parse(provider).ProviderId : 0
 				}
-			);
+			});
 			setData(response.Response);
 			setFilteredData(response.Response);
 			setLoading(false);
@@ -122,7 +122,7 @@ export default function AssignClientPage(){
 			IsBarberBooking: true
 		}
 		//Booking
-		const response = await addCustomerBookings(scheduleSubmitData);
+		const response = await apiClient.post<{Status: number, Message: string}>('/company/addcustomerbookings', scheduleSubmitData);
 
 		console.log(response);
 

@@ -11,7 +11,7 @@ import {DashboardHeader} from "@/components/layout/DashboardHeader";
 import {SchedulerSteps} from "@/components/layout/SchedulerSteps";
 import {useSchedulerStore} from "@/lib/store/schedulerStore";
 import { useRouter } from 'next/navigation';
-import {getServices} from "@/lib/actions/scheduler.actions";
+import { apiClient } from "@/lib/api/axios-instance";
 import ServiceSkeleton from "@/components/skeleton/ServiceSkeleton";
 import {User} from "@/lib/types/auth.types";
 import { useSessionStorage } from '@/lib/hooks/useSessionStorage';
@@ -35,7 +35,9 @@ export default function ServiceList() {
 
   useEffect(() => {
     async function load(user: User) {
-      const response = await getServices({companyadminId: user.UserID});
+      const response = await apiClient.get<{Status: number, Message: string, Object: Service[]}>('/company/getservices', {
+        params: {companyadminId: user.UserID}
+      });
 
       if(response.Status !== 201){
         toast.error(response.Message);

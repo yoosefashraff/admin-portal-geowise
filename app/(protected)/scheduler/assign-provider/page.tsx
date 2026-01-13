@@ -25,7 +25,7 @@ import {useAuthStore} from "@/lib/store/authStore";
 import { useRouter } from 'next/navigation';
 import { SchedulerData} from "@/lib/types/scheduler.types";
 import {User} from "@/lib/types/auth.types";
-import {searchCompanyProvider} from "@/lib/actions/scheduler.actions";
+import { apiClient } from "@/lib/api/axios-instance";
 import ProviderSkeleton from "@/components/skeleton/ProviderSkeleton";
 import { toast } from 'sonner';
 import { useSessionStorage } from '@/lib/hooks/useSessionStorage';
@@ -69,7 +69,7 @@ export default function ProviderSelect() {
         router.replace('/scheduler/select-service');
       }
 
-      const response = await searchCompanyProvider(
+      const response = await apiClient.post<{Object: Provider[]}>('/company/searchcompanyprovider',
         {
           ServiceId: String(serviceId),
           CompanyId: user.UserID,

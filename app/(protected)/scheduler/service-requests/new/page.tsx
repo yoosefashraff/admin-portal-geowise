@@ -11,7 +11,7 @@ import Step1Form from '@/components/service-requests/Step1Form';
 import Step2Form from '@/components/service-requests/Step2Form';
 import Step3Form from '@/components/service-requests/Step3Form';
 import { useAuthStore } from '@/lib/store/authStore';
-import { addCustomerBookings } from '@/lib/actions/scheduler.actions';
+import { apiClient } from '@/lib/api/axios-instance';
 import { toast } from 'sonner';
 import type { ServiceRequest } from '@/lib/types/serviceRequest.types';
 
@@ -170,7 +170,7 @@ export default function NewServiceRequestPage() {
       };
 
       // Submit to API
-      const response = await addCustomerBookings(bookingData);
+      const response = await apiClient.post<{Status: number, Message: string}>('/company/addcustomerbookings', bookingData);
 
       if (response.Status === 201) {
         toast.success('Service request created successfully!');
