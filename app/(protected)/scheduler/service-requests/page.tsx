@@ -335,17 +335,29 @@ export default function ServiceRequestsPage() {
           createdAt: createdAt, // For sorting (newest first)
           }
           
-          // Log if this looks like an imported record (has Patient_Name or other import fields)
-          if (callout.Patient_Name || callout['Approved Service'] || callout.Mobile_Number || callout.IsImported) {
+          // Log if this looks like an imported record
+          // Check multiple indicators: original Excel fields, Test Customer names, or IsImported flag
+          const isTestCustomer = /Test Customer \d+/i.test(customerName)
+          const hasImportFields = callout.Patient_Name || callout['Approved Service'] || callout.Mobile_Number || callout.IsImported
+          const hasImportCredits = callout.Approved_Count !== undefined || callout['Approved_Count'] !== undefined
+          
+          if (isTestCustomer || hasImportFields || hasImportCredits) {
             console.log('📥 Mapped imported record:', {
+              detectedBy: isTestCustomer ? 'Test Customer name' : (hasImportFields ? 'Import fields' : 'Import credits'),
               originalFields: {
                 Patient_Name: callout.Patient_Name,
+                Customer: callout.Customer,
                 'Approved Service': callout['Approved Service'],
+                ServiceName: callout.ServiceName,
                 Mobile_Number: callout.Mobile_Number,
+                PhoneNumber: callout.PhoneNumber,
                 Location: callout.Location,
+                Address: callout.Address,
                 Approved_Count: callout.Approved_Count,
                 Used_Count: callout.Used_Count,
                 Remaining_Count: callout.Remaining_Count,
+                CreatedAt: callout.CreatedAt,
+                BookingDate: callout.BookingDate,
               },
               mappedTo: {
                 name: mappedRequest.name,
@@ -353,7 +365,9 @@ export default function ServiceRequestsPage() {
                 phone: mappedRequest.phone,
                 address: mappedRequest.address,
                 credits: mappedRequest.credits,
-              }
+                createdAt: mappedRequest.createdAt,
+              },
+              allCalloutFields: Object.keys(callout).slice(0, 20) // Show first 20 fields for debugging
             })
           }
           
