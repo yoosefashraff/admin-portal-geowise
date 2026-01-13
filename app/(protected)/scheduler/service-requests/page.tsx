@@ -43,6 +43,12 @@ export default function ServiceRequestsPage() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [isRunningAutoDispatch, setIsRunningAutoDispatch] = useState(false)
   const itemsPerPage = 10
+  
+  // Sorting and filtering for service requests
+  const [sortBy, setSortBy] = useState<'date' | 'name' | 'service' | 'status' | 'credits'>('date')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [serviceStatusFilter, setServiceStatusFilter] = useState<'All' | 'Approved' | 'Pending' | 'Draft' | 'Rejected'>('All')
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<string>('All')
 
   // Fetch service requests from API
     const loadServiceRequests = async () => {
@@ -419,31 +425,67 @@ export default function ServiceRequestsPage() {
     loadDispatchLogs()
   }, [user])
 
-  // Filter requests based on search query
+  // Get unique service types for filter dropdown
+  const uniqueServices = useMemo(() => {
+    const services = new Set(requests.map(r => r.service).filter(Boolean))
+    return Array.from(services).sort()
+  }, [requests])
+
+  // Filter requests based on search query, status, and service type
   const filteredRequests = useMemo(() => {
     let filtered = requests
 
     // Filter by search query
     if (searchQuery.trim()) {
-    const query = searchQuery.toLowerCase()
+      const query = searchQuery.toLowerCase()
       filtered = filtered.filter(
-      (req) =>
-        req.name.toLowerCase().includes(query) ||
-        req.service.toLowerCase().includes(query) ||
-        req.phone.includes(query) ||
-        req.address.toLowerCase().includes(query)
-    )
+        (req) =>
+          req.name.toLowerCase().includes(query) ||
+          req.service.toLowerCase().includes(query) ||
+          req.phone.includes(query) ||
+          req.address.toLowerCase().includes(query)
+      )
     }
 
-    // Sort by date (newest first) - most recently added/imported appears first
+    // Filter by status
+    if (serviceStatusFilter !== 'All') {
+      filtered = filtered.filter((req) => req.status === serviceStatusFilter)
+    }
+
+    // Filter by service type
+    if (serviceTypeFilter !== 'All') {
+      filtered = filtered.filter((req) => req.service === serviceTypeFilter)
+    }
+
+    // Sort based on selected sort option
     filtered = filtered.sort((a, b) => {
-      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
-      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
-      return dateB - dateA // Descending order (newest first)
+      let comparison = 0
+      
+      switch (sortBy) {
+        case 'date':
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+          comparison = dateB - dateA // Default: newest first
+          break
+        case 'name':
+          comparison = a.name.localeCompare(b.name)
+          break
+        case 'service':
+          comparison = a.service.localeCompare(b.service)
+          break
+        case 'status':
+          comparison = a.status.localeCompare(b.status)
+          break
+        case 'credits':
+          comparison = (a.credits.remaining || 0) - (b.credits.remaining || 0)
+          break
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison
     })
 
     return filtered
-  }, [requests, searchQuery])
+  }, [requests, searchQuery, serviceStatusFilter, serviceTypeFilter, sortBy, sortOrder])
 
   // Paginate requests
   const paginatedRequests = useMemo(() => {
@@ -844,6 +886,91 @@ export default function ServiceRequestsPage() {
             >
               Retry
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Sorting and Filtering Controls - Only show for services tab */}
+      {!isLoading && activeTab === 'services' && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Status Filter */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Status:</label>
+              <select
+                value={serviceStatusFilter}
+                onChange={(e) => {
+                  setServiceStatusFilter(e.target.value as any)
+                  setCurrentPage(1) // Reset to first page when filter changes
+                }}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="All">All Status</option>
+                <option value="Approved">Approved</option>
+                <option value="Pending">Pending</option>
+                <option value="Draft">Draft</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+            </div>
+
+            {/* Service Type Filter */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Service:</label>
+              <select
+                value={serviceTypeFilter}
+                onChange={(e) => {
+                  setServiceTypeFilter(e.target.value)
+                  setCurrentPage(1) // Reset to first page when filter changes
+                }}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent min-w-[150px]"
+              >
+                <option value="All">All Services</option>
+                {uniqueServices.map((service) => (
+                  <option key={service} value={service}>
+                    {service}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sort By */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Sort by:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value as any)
+                  setCurrentPage(1) // Reset to first page when sort changes
+                }}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              >
+                <option value="date">Date (Newest First)</option>
+                <option value="name">Name</option>
+                <option value="service">Service</option>
+                <option value="status">Status</option>
+                <option value="credits">Remaining Credits</option>
+              </select>
+            </div>
+
+            {/* Sort Order */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Order:</label>
+              <button
+                onClick={() => {
+                  setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+                  setCurrentPage(1) // Reset to first page when sort order changes
+                }}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent flex items-center gap-2"
+                title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+              >
+                {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
+              </button>
+            </div>
+
+            {/* Results count */}
+            <div className="ml-auto text-sm text-gray-600">
+              Showing {paginatedRequests.length} of {filteredRequests.length} service request{filteredRequests.length !== 1 ? 's' : ''}
+            </div>
           </div>
         </div>
       )}
