@@ -30,6 +30,7 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store/authStore';
 import { set } from 'date-fns';
 import { Button } from '@/components/ui/button';
+import EditBookingDialog from '@/components/shared/EditBookingDialog';
 
 export default function SchedulerCalendar() {
   const calendarRef = useRef<FullCalendar>(null);
@@ -47,7 +48,8 @@ export default function SchedulerCalendar() {
     start: new Date(),
     end: new Date(),
   });
-  const [editLoading, setEditLoading] = useState(false);
+  const [submitLoading, setSubmitLoading] = useState<boolean>(false);
+  const [newBookingDialog, setNewBookingDialog] = useState<boolean>(false);
 
   const lastFetchParamsRef = useRef<string | null>(null);
   const isFetchingRef = useRef(false);
@@ -307,7 +309,7 @@ export default function SchedulerCalendar() {
 
   const handleEditBooking = async (bookingPayload: BookingRequestPayload) => {
     // return;
-    setEditLoading(true);
+    setSubmitLoading(true);
     const response = await calendarBooking(bookingPayload);
     if (response.Status === 201) {
       toast.success('Booking updated successfully');
@@ -322,7 +324,7 @@ export default function SchedulerCalendar() {
     } else {
       toast.error('Unable to update booking. Please try again.');
     }
-    setEditLoading(false);
+    setSubmitLoading(false);
   }
 
   const renderEventContent = (eventInfo: EventContentArg) => {
@@ -532,11 +534,43 @@ export default function SchedulerCalendar() {
     }
   };
 
+  const onBookingSubmit = async (bookingPayload: BookingRequestPayload) => {
+    // console.log(bookingPayload);
+    // return;
+    setSubmitLoading(true);
+    const response = await calendarBooking(bookingPayload);
+
+    if (response.Status === 201) {
+      toast.success(response.Message);
+      lastFetchParamsRef.current = null;
+      isFetchingRef.current = false;
+      // Update the calendar
+      const fetchStartISO = toISODateString(dateRange.start, '00:00:00');
+      const fetchEndISO = toISODateString(dateRange.end, '23:59:59');
+      fetchAndRenderCalendar(fetchStartISO, fetchEndISO);
+      setSelectedEvent(null);
+    } else {
+      toast.error('Unable to add booking. Please try again.');
+    }
+    setSubmitLoading(false);
+  }
+
   return (
     <div>
-
       <div className="flex justify-end mb-6 gap-2">
-        {/* <Button className="cursor-pointer">New Booking</Button> */}
+        <Button 
+          className="cursor-pointer"
+          onClick={() => setNewBookingDialog(true)}
+        >
+          New Booking
+        </Button>
+        <EditBookingDialog 
+          showDialog={newBookingDialog} 
+          setShowDialog={setNewBookingDialog} 
+          title="New Booking" 
+          handleSubmit={onBookingSubmit} 
+          submitLoading={submitLoading}
+        />
         <Button 
           className="cursor-pointer"
           onClick={handleExportCalendar}
@@ -693,7 +727,7 @@ export default function SchedulerCalendar() {
           onClose={() => setSelectedEvent(null)}
           onCancel={handleCancelBooking}
           onEditSubmit={handleEditBooking}
-          editLoading={editLoading}
+          editLoading={submitLoading}
         />
       )}
     </div>
