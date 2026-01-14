@@ -57,29 +57,42 @@ export default function ServiceRequestsPage() {
       setIsLoading(true)
       setError(null)
       try {
-        // Fetch a wider date range to include imported records that may have future booking dates
-        // Imported records might have booking dates set to future dates, so we need to fetch beyond today
+        // Fetch a MUCH wider date range to include imported records that may have ANY booking dates
+        // Backend converts imported records to bookings, but they might have dates anywhere
+        // We need to fetch a very wide range to catch them all
         const today = new Date()
         const startDate = new Date(today)
-        startDate.setDate(startDate.getDate() - 7) // 7 days ago
+        startDate.setDate(startDate.getDate() - 365) // 1 year ago - catch old bookings
         const endDate = new Date(today)
-        endDate.setDate(endDate.getDate() + 90) // 90 days in the future
+        endDate.setDate(endDate.getDate() + 365) // 1 year in the future - catch future bookings
         
         const startDateStr = startDate.toISOString().split('T')[0]
         const endDateStr = endDate.toISOString().split('T')[0]
         
-        console.log('📅 Fetching service requests with date range:', {
+        console.log('📅 Fetching service requests with WIDE date range:', {
           startDate: startDateStr,
           endDate: endDateStr,
-          reason: 'Including imported records that may have future booking dates'
+          range: '1 year ago to 1 year in the future',
+          reason: 'Backend converts imported records to bookings with unknown dates - need wide range to catch them all',
+          warning: 'This is a workaround until backend stops auto-converting imports to bookings'
         })
         
+        // Fetch with IsOnlyConfirmed=false to get ALL bookings (including unconfirmed)
+        // This ensures we catch imported records that might be unconfirmed
         const response = await fetchServiceRequests(
           startDateStr,
           endDateStr,
-          false,
+          false, // IsOnlyConfirmed = false to get all bookings
           user.UserID
         )
+        
+        console.log('📥 Fetch response:', {
+          Status: response.Status,
+          hasObject: !!response.Object,
+          objectType: Array.isArray(response.Object) ? 'array' : typeof response.Object,
+          objectLength: Array.isArray(response.Object) ? response.Object.length : 'N/A',
+          barbersCount: Array.isArray(response.Object) ? response.Object.length : (response.Object ? 1 : 0)
+        })
         
         if (response.Status !== 201) {
           // Check if it's an authentication error
@@ -92,21 +105,36 @@ export default function ServiceRequestsPage() {
         }
 
         // Fetch user credits to merge with service requests
-        let creditsMap = new Map<number, { approved: number; used: number; remaining: number; creditId?: number }>()
+        // Create a map with multiple keys: UserId, and also by ServiceId+UserId combination
+        let creditsMap = new Map<number, { approved: number; used: number; remaining: number; creditId?: number; serviceId?: number }>()
+        let creditsByServiceUser = new Map<string, { approved: number; used: number; remaining: number; creditId?: number }>() // key: "serviceId:userId"
         try {
           const creditsResponse = await listApprovedUserCredits({ IsActive: true })
           if (creditsResponse.Status === 201 && creditsResponse.data && Array.isArray(creditsResponse.data)) {
+            console.log('📊 Loaded credits:', creditsResponse.data.length, 'credits')
             creditsResponse.data.forEach((credit) => {
               if (credit.UserId && credit.ServiceId) {
-                // Use UserId as key to map credits to bookings
+                // Store by UserId (for quick lookup)
                 creditsMap.set(credit.UserId, {
                   approved: credit.ApprovedCredits,
                   used: credit.UsedCredits || 0,
                   remaining: credit.RemainingCredits || 0,
                   creditId: credit.Id,
+                  serviceId: credit.ServiceId,
                 })
+                // Also store by serviceId:userId combination for more precise matching
+                const serviceUserKey = `${credit.ServiceId}:${credit.UserId}`
+                creditsByServiceUser.set(serviceUserKey, {
+                  approved: credit.ApprovedCredits,
+                  used: credit.UsedCredits || 0,
+                  remaining: credit.RemainingCredits || 0,
+                  creditId: credit.Id,
+                })
+                console.log(`💳 Credit loaded: UserId=${credit.UserId}, ServiceId=${credit.ServiceId}, Remaining=${credit.RemainingCredits || 0}, CreditId=${credit.Id}`)
               }
             })
+            console.log('📊 Credits map size:', creditsMap.size, 'entries')
+            console.log('📊 Credits by service+user:', creditsByServiceUser.size, 'entries')
           }
         } catch (creditsError) {
           // Only log if it's not a JSON parsing error (which is expected if API returns HTML)
@@ -163,6 +191,25 @@ export default function ServiceRequestsPage() {
           })
         }
       })
+      
+      // Log booking dates to see what range we're getting
+      if (allCallouts.length > 0) {
+        const bookingDates = allCallouts
+          .map(c => c.BookingDate || c.bookingDate || c.Date || c.date)
+          .filter(Boolean)
+          .map(d => new Date(d))
+          .sort((a, b) => a.getTime() - b.getTime())
+        
+        console.log('📅 Booking dates range in fetched data:', {
+          totalCallouts: allCallouts.length,
+          earliestBooking: bookingDates[0]?.toISOString() || 'N/A',
+          latestBooking: bookingDates[bookingDates.length - 1]?.toISOString() || 'N/A',
+          dateRange: bookingDates.length > 0 
+            ? `${Math.floor((bookingDates[bookingDates.length - 1].getTime() - bookingDates[0].getTime()) / (1000 * 60 * 60 * 24))} days`
+            : 'N/A',
+          sampleDates: bookingDates.slice(0, 10).map(d => d.toISOString().split('T')[0])
+        })
+      }
       
       // Add imported requests to the list (they might be in a different format)
       if (importedRequests.length > 0) {
@@ -294,6 +341,9 @@ export default function ServiceRequestsPage() {
         const userId = callout.UserId || callout.userId || callout.UserID || 
           callout['ID number '] || callout.id_number || providerId
         
+        // Get serviceId for more precise credit matching
+        const serviceId = callout.ServiceId || callout.serviceId || undefined
+        
         // Check if credits are in the callout (from imported records)
         const hasImportedCredits = callout.Approved_Count !== undefined || callout['Approved_Count'] !== undefined
         let creditInfo: { approved: number; used: number; remaining: number; creditId?: number }
@@ -307,10 +357,36 @@ export default function ServiceRequestsPage() {
             creditId: callout.ApprovedUserCreditId || callout.approvedUserCreditId || callout.CreditId || callout.creditId || undefined
           }
         } else {
-          // Use credits from creditsMap (for regular bookings)
-          creditInfo = userId && creditsMap.has(userId) 
-            ? creditsMap.get(userId)! 
-            : { approved: 0, used: 0, remaining: 0, creditId: undefined }
+          // Try to match credits: first by serviceId+userId (most precise), then by userId only
+          let matchedCredit = null
+          
+          if (serviceId && userId) {
+            const serviceUserKey = `${serviceId}:${userId}`
+            if (creditsByServiceUser.has(serviceUserKey)) {
+              matchedCredit = creditsByServiceUser.get(serviceUserKey)!
+              console.log(`✅ Matched credit by service+user: ${serviceUserKey}, remaining=${matchedCredit.remaining}`)
+            }
+          }
+          
+          // Fallback: match by userId only (less precise, but works if serviceId doesn't match)
+          if (!matchedCredit && userId && creditsMap.has(userId)) {
+            matchedCredit = creditsMap.get(userId)!
+            console.log(`✅ Matched credit by userId only: ${userId}, remaining=${matchedCredit.remaining}`)
+          }
+          
+          creditInfo = matchedCredit || { approved: 0, used: 0, remaining: 0, creditId: undefined }
+          
+          // Log if we couldn't match credits (for debugging)
+          if (!matchedCredit && userId) {
+            console.log(`⚠️ No credit match found for callout:`, {
+              calloutId: callout.Id,
+              customer: callout.Customer,
+              userId: userId,
+              serviceId: serviceId,
+              availableUserIds: Array.from(creditsMap.keys()),
+              availableServiceUserKeys: Array.from(creditsByServiceUser.keys())
+            })
+          }
         }
 
         // Determine status - Callouts are typically "Approved" or "Confirmed" when they appear
@@ -389,6 +465,32 @@ export default function ServiceRequestsPage() {
           return mappedRequest
         })
 
+      // Log summary of credits vs service requests
+      console.log('📊 Credits vs Service Requests Summary:', {
+        totalCredits: creditsMap.size,
+        totalServiceRequests: mappedRequests.length,
+        creditsWithMatchingRequests: mappedRequests.filter(r => r.credits.remaining > 0).length,
+        creditsWithoutMatchingRequests: creditsMap.size - mappedRequests.filter(r => r.credits.remaining > 0).length,
+        message: 'If you added credits but don\'t see service requests, you may need to create a service request for that customer first.'
+      })
+      
+      // Check for credits that don't have matching service requests
+      const creditsWithoutRequests: number[] = []
+      creditsMap.forEach((credit, userId) => {
+        const hasMatchingRequest = mappedRequests.some(r => r.userId === userId && r.credits.remaining > 0)
+        if (!hasMatchingRequest && credit.remaining > 0) {
+          creditsWithoutRequests.push(userId)
+        }
+      })
+      
+      if (creditsWithoutRequests.length > 0) {
+        console.warn('⚠️ Found credits without matching service requests:', {
+          count: creditsWithoutRequests.length,
+          userIds: creditsWithoutRequests,
+          message: 'These customers have credits but no service requests. Create a service request for them to use auto-dispatch.'
+        })
+      }
+
       // Merge with pending requests from sessionStorage (newly created)
       const pendingRequests = sessionStorage.getItem('pendingServiceRequests');
       let allRequests = mappedRequests;
@@ -414,17 +516,46 @@ export default function ServiceRequestsPage() {
         }
       }
 
+      // Count imported/test customer records
+      const testCustomerRecords = allRequests.filter(r => /Test Customer/i.test(r.name))
+      const importedRecordsCount = testCustomerRecords.length
+      
       // Log requests for debugging
       console.log('📊 Loaded service requests:', {
         total: allRequests.length,
         fromBookings: allCallouts.length - importedRequests.length,
         fromImported: importedRequests.length,
+        testCustomerRecords: importedRecordsCount,
         sampleRequest: allRequests.length > 0 ? allRequests[0] : null,
         requestNames: allRequests.map(r => r.name).slice(0, 10),
         requestIds: allRequests.map(r => r.id).slice(0, 10),
         requestStatuses: allRequests.map(r => r.status),
-        sortedByDate: 'newest first'
+        sortedByDate: 'newest first',
+        testCustomerNames: testCustomerRecords.map(r => r.name).slice(0, 10),
+        testCustomerStatuses: testCustomerRecords.map(r => r.status),
+        testCustomerServices: testCustomerRecords.map(r => r.service)
       })
+      
+      // Show notification if imported records were found
+      if (importedRecordsCount > 0) {
+        console.log(`✅ Found ${importedRecordsCount} imported "Test Customer" records in the table!`)
+        console.log('💡 TIP: If you don\'t see them, check:')
+        console.log('   1. Status filter is set to "All" (not filtering by status)')
+        console.log('   2. Service type filter is set to "All" (not filtering by service)')
+        console.log('   3. Search for "Test Customer" to find them quickly')
+        console.log('   4. Check pagination - they might be on page 2+')
+        
+        // Show a toast notification
+        setTimeout(() => {
+          toast.success(
+            `Found ${importedRecordsCount} imported record${importedRecordsCount !== 1 ? 's' : ''} in the table!`,
+            {
+              description: `Search for "Test Customer" or set filters to "All" to see them.`,
+              duration: 5000
+            }
+          )
+        }, 1000)
+      }
       
       // Check if imported requests might be in the regular callouts
       if (importedRequests.length === 0 && allCallouts.length > 0) {
@@ -443,15 +574,36 @@ export default function ServiceRequestsPage() {
         console.warn('⚠️ BACKEND BEHAVIOR: Imported records are being converted to bookings immediately.')
         console.warn('   This is likely incorrect behavior - imported records should remain as pending service requests.')
         console.warn('   They should NOT be converted to bookings until explicitly dispatched.')
-        console.log(`   Currently, they appear as bookings in the regular list (${allRequests.length} total requests).`)
+        console.log(`   Currently fetching ${allCallouts.length} total callouts from date range: ${startDateStr} to ${endDateStr}`)
+        console.log(`   Mapped to ${allRequests.length} service requests in the table.`)
+        console.warn('   ⚠️ ISSUE: If imported records were converted to bookings, they should appear in the table above.')
+        console.warn('   If they don\'t appear, they may have booking dates outside our fetch range, or be filtered by CompanyAdminId.')
         console.log('   Backend needs to be updated to keep imported records as pending service requests.')
       } else {
         console.log(`✅ Found ${importedRequests.length} imported requests that will be added to the list.`)
       }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to load service requests:', err)
-        setError(err instanceof Error ? err.message : 'Failed to load service requests')
-      setRequests([]) // Set to empty array on error
+        
+        // Check if it's a timeout error
+        const isTimeout = err.message?.includes('timeout') || 
+                         err.message?.includes('Request timeout') ||
+                         err.code === 'ECONNABORTED' ||
+                         err.message?.includes('took too long')
+        
+        if (isTimeout) {
+          const errorMsg = 'Request timed out. The date range may be too large. The backend is processing a 2-year date range which can take time. Please try refreshing the page.'
+          setError(errorMsg)
+          toast.error('Request timed out. The backend is processing a large date range. Please try again.')
+        } else if (err.message?.includes('Status: 500')) {
+          const errorMsg = 'Backend error (500). The server may be experiencing issues. Please try again or contact support.'
+          setError(errorMsg)
+          toast.error('Backend error. Please try again.')
+        } else {
+          setError(err instanceof Error ? err.message : 'Failed to load service requests')
+        }
+        
+        setRequests([]) // Set to empty array on error
       } finally {
         setIsLoading(false)
       }
@@ -572,13 +724,50 @@ export default function ServiceRequestsPage() {
 
     // Filter by search query
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
+      const query = searchQuery.toLowerCase().trim()
+      // Remove any search icon characters (like "Q" prefix)
+      const cleanQuery = query.replace(/^[q]\s*/i, '').trim()
+      
+      // Debug logging for search (only log once per unique query to avoid spam)
+      if (cleanQuery && requests.length > 0) {
+        const matches = requests.filter(
+          (req) =>
+            req.name.toLowerCase().includes(cleanQuery) ||
+            req.service.toLowerCase().includes(cleanQuery) ||
+            req.phone.includes(cleanQuery) ||
+            req.address.toLowerCase().includes(cleanQuery)
+        )
+        
+        // Log search results
+        console.log('🔍 Search debug:', {
+          originalQuery: searchQuery,
+          cleanQuery: cleanQuery,
+          totalRequests: requests.length,
+          matchesFound: matches.length,
+          sampleNames: requests.slice(0, 20).map(r => r.name),
+          sampleMatches: matches.slice(0, 10).map(m => m.name),
+          allUniqueNames: [...new Set(requests.map(r => r.name))].slice(0, 50),
+          note: matches.length === 0 
+            ? '⚠️ No matches found. Check if imported records have different names than expected.'
+            : `✅ Found ${matches.length} matches`
+        })
+        
+        // If no matches and searching for "test customer", show all names containing "test"
+        if (matches.length === 0 && cleanQuery.includes('test')) {
+          const testMatches = requests.filter(r => r.name.toLowerCase().includes('test'))
+          console.log('🔍 Test customer search - alternative matches:', {
+            testMatchesCount: testMatches.length,
+            testMatchNames: testMatches.map(m => m.name).slice(0, 20)
+          })
+        }
+      }
+      
       filtered = filtered.filter(
         (req) =>
-          req.name.toLowerCase().includes(query) ||
-          req.service.toLowerCase().includes(query) ||
-          req.phone.includes(query) ||
-          req.address.toLowerCase().includes(query)
+          req.name.toLowerCase().includes(cleanQuery) ||
+          req.service.toLowerCase().includes(cleanQuery) ||
+          req.phone.includes(cleanQuery) ||
+          req.address.toLowerCase().includes(cleanQuery)
       )
     }
 
@@ -590,6 +779,29 @@ export default function ServiceRequestsPage() {
     // Filter by service type
     if (serviceTypeFilter !== 'All') {
       filtered = filtered.filter((req) => req.service === serviceTypeFilter)
+    }
+
+    // Log filtering results to help debug why imported records might not be visible
+    const testCustomerRecords = requests.filter(r => /Test Customer/i.test(r.name))
+    if (testCustomerRecords.length > 0) {
+      const testCustomersInFiltered = filtered.filter(r => /Test Customer/i.test(r.name))
+      if (testCustomersInFiltered.length !== testCustomerRecords.length) {
+        console.warn('⚠️ Some imported records are being filtered out:', {
+          totalTestCustomers: testCustomerRecords.length,
+          visibleAfterFilters: testCustomersInFiltered.length,
+          filteredOut: testCustomerRecords.length - testCustomersInFiltered.length,
+          currentFilters: {
+            status: serviceStatusFilter,
+            serviceType: serviceTypeFilter,
+            searchQuery: searchQuery
+          },
+          testCustomerStatuses: [...new Set(testCustomerRecords.map(r => r.status))],
+          testCustomerServices: [...new Set(testCustomerRecords.map(r => r.service))],
+          tip: 'Set status filter to "All" and service type to "All" to see all imported records'
+        })
+      } else {
+        console.log(`✅ All ${testCustomerRecords.length} imported records are visible after filters`)
+      }
     }
 
     // Sort based on selected sort option
@@ -726,10 +938,110 @@ export default function ServiceRequestsPage() {
       const uniqueCreditIds = [...new Set(creditIds)]
 
       console.log('Running Auto Dispatch with credit IDs:', uniqueCreditIds)
-      console.log('Selected services:', selectedServices.map(s => ({ id: s.id, name: s.name, creditId: s.approvedUserCreditId })))
+      console.log('Selected services:', selectedServices.map(s => ({ 
+        id: s.id, 
+        name: s.name, 
+        creditId: s.approvedUserCreditId,
+        userId: s.userId,
+        serviceId: s.serviceId,
+        remainingCredits: s.credits.remaining
+      })))
+
+      // Validate credit IDs before calling API
+      // Fetch current credits to verify they exist and have remaining balance
+      console.log('🔍 Validating credit IDs before auto-dispatch...')
+      const validationResponse = await listApprovedUserCredits({ IsActive: true })
+      if (validationResponse.Status === 201 && validationResponse.data && Array.isArray(validationResponse.data)) {
+        const availableCredits = validationResponse.data
+        const validCreditIds: number[] = []
+        const invalidCreditIds: number[] = []
+        
+        uniqueCreditIds.forEach(creditId => {
+          const credit = availableCredits.find(c => c.Id === creditId)
+          if (credit && (credit.RemainingCredits || 0) > 0) {
+            validCreditIds.push(creditId)
+            console.log(`✅ Credit ID ${creditId} is valid: ${credit.RemainingCredits} remaining credits`)
+          } else {
+            invalidCreditIds.push(creditId)
+            if (credit) {
+              console.warn(`⚠️ Credit ID ${creditId} has no remaining credits (${credit.RemainingCredits || 0} remaining)`)
+            } else {
+              console.warn(`⚠️ Credit ID ${creditId} not found in database`)
+            }
+          }
+        })
+
+        // Filter out service requests with 0 remaining credits from selectedServices
+        const servicesWithCredits = selectedServices.filter(s => {
+          const hasCredits = s.credits && s.credits.remaining > 0;
+          if (!hasCredits) {
+            console.warn(`⚠️ Service request ${s.id} has 0 remaining credits, excluding from auto-dispatch`);
+          }
+          return hasCredits;
+        });
+
+        if (servicesWithCredits.length === 0) {
+          toast.error('No service requests with remaining credits selected. Please select requests that have remaining credits > 0.');
+          setIsRunningAutoDispatch(false);
+          return;
+        }
+
+        if (servicesWithCredits.length < selectedServices.length) {
+          const excludedCount = selectedServices.length - servicesWithCredits.length;
+          toast.warning(`${excludedCount} service request(s) with 0 remaining credits were excluded from auto-dispatch.`);
+        }
+        
+        if (invalidCreditIds.length > 0) {
+          console.warn('⚠️ Some credit IDs are invalid or have no remaining credits:', {
+            invalidIds: invalidCreditIds,
+            validIds: validCreditIds,
+            totalSelected: uniqueCreditIds.length,
+            validCount: validCreditIds.length
+          })
+          
+          // If some are invalid but we have valid ones, use only valid ones
+          if (validCreditIds.length > 0) {
+            console.log(`✅ Using ${validCreditIds.length} valid credit ID(s) instead of ${uniqueCreditIds.length} selected`)
+            uniqueCreditIds.splice(0, uniqueCreditIds.length, ...validCreditIds)
+          } else {
+            // No valid credits - try to find credits for the selected services
+            console.log('⚠️ No valid credit IDs found. Attempting to find credits for selected services...')
+            const fallbackCreditIds: number[] = []
+            
+            servicesWithCredits.forEach(service => {
+              const matchingCredit = availableCredits.find(
+                c => c.UserId === service.userId && 
+                     c.ServiceId === service.serviceId &&
+                     (c.RemainingCredits || 0) > 0
+              )
+              if (matchingCredit?.Id && !fallbackCreditIds.includes(matchingCredit.Id)) {
+                fallbackCreditIds.push(matchingCredit.Id)
+                console.log(`✅ Found matching credit ID ${matchingCredit.Id} for service ${service.name}`)
+              }
+            })
+            
+            if (fallbackCreditIds.length > 0) {
+              uniqueCreditIds.splice(0, uniqueCreditIds.length, ...fallbackCreditIds)
+              console.log(`✅ Using ${fallbackCreditIds.length} fallback credit ID(s)`)
+            } else {
+              toast.error(
+                `No valid credits found. The selected services don't have credits with remaining balance in the ${process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL ? 'DEV' : 'PRODUCTION'} database.`,
+                {
+                  description: 'Please ensure credits exist and have remaining balance, or create new credits in the Credits page.',
+                  duration: 8000
+                }
+              )
+              setIsRunningAutoDispatch(false)
+              return
+            }
+          }
+        }
+      } else {
+        console.warn('⚠️ Could not validate credit IDs - proceeding anyway (backend will validate)')
+      }
 
       // Call the real API with timeout handling
-      console.log('Calling generateBookings API...')
+      console.log('Calling generateBookings API with validated credit IDs:', uniqueCreditIds)
       const startTime = Date.now()
       const response = await generateBookings(uniqueCreditIds)
       const duration = Date.now() - startTime
@@ -748,10 +1060,40 @@ export default function ServiceRequestsPage() {
         router.push('/scheduler/auto-dispatch/progress')
       } else {
         const errorMessage = response.Message || 'Failed to start Auto Dispatch'
-        toast.error(errorMessage)
+        
+        // Provide more helpful error messages for common issues
+        let userFriendlyMessage = errorMessage
+        if (errorMessage.includes('No ApprovedUserCredits found') || errorMessage.includes('no remaining credits')) {
+          userFriendlyMessage = `No valid credits found for the selected services. The credits may not exist in the ${process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL ? 'DEV' : 'PRODUCTION'} database, or they may have no remaining balance.`
+        } else if (errorMessage.includes('timeout')) {
+          userFriendlyMessage = 'Request timed out. The server may be processing. Please try again.'
+        } else if (errorMessage.includes('Cannot connect') || errorMessage.includes('Network Error')) {
+          userFriendlyMessage = `Cannot connect to backend. Please verify the ${process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL ? 'DEV' : 'PRODUCTION'} backend is running.`
+        }
+        
+        toast.error(userFriendlyMessage, {
+          description: errorMessage !== userFriendlyMessage ? errorMessage : undefined,
+          duration: 8000
+        })
+        
         if (response.data?.ErrorLogs && response.data.ErrorLogs.length > 0) {
           console.error('Error logs:', response.data.ErrorLogs)
         }
+        
+        // Log detailed error for debugging
+        console.error('Auto Dispatch error details:', {
+          status: response.Status,
+          message: response.Message,
+          creditIds: uniqueCreditIds,
+          selectedServices: selectedServices.map(s => ({
+            name: s.name,
+            creditId: s.approvedUserCreditId,
+            userId: s.userId,
+            serviceId: s.serviceId,
+            remainingCredits: s.credits.remaining
+          })),
+          responseData: response.data
+        })
       }
     } catch (error) {
       console.error('Failed to run Auto Dispatch:', error)
@@ -794,88 +1136,18 @@ export default function ServiceRequestsPage() {
     console.log('Reloading service requests from API after import...')
     await loadServiceRequests()
     
-    // After reload, search for imported records to help user find them
-    // Imported records typically have "Test Customer" in the name or specific patterns
-    setTimeout(() => {
-      const importedNames = importedData?.map((row: any) => {
-        // Try to get the name from various possible fields
-        return row['Patient_Name'] || row['Name'] || row['name'] || row['Customer'] || ''
-      }).filter(Boolean) || []
-      
-      // If we have imported names, search for them
-      if (importedNames.length > 0) {
-        // Search for the first imported name to help user find the records
-        const searchTerm = importedNames[0] || 'Test Customer'
-        setSearchQuery(searchTerm)
-        setCurrentPage(1) // Reset to first page
-        console.log(`🔍 Auto-searching for imported records: "${searchTerm}"`)
-        console.log(`📊 Total requests: ${requests.length}, searching for:`, importedNames.slice(0, 5))
-      } else {
-        // Fallback: search for "Test Customer" pattern
-        setSearchQuery('Test Customer')
-        setCurrentPage(1)
-        console.log('🔍 Auto-searching for "Test Customer" records')
-      }
-    }, 1500) // Wait for requests to be loaded
-    
     // Show success message with helpful note
     if (importedData && Array.isArray(importedData) && importedData.length > 0) {
-      toast.success(`Successfully imported ${importedData.length} service request${importedData.length !== 1 ? 's' : ''}. Searching for imported records...`, {
+      toast.success(`Successfully imported ${importedData.length} service request${importedData.length !== 1 ? 's' : ''}.`, {
         description: '⚠️ Note: Backend is converting imported records to bookings immediately. They should remain as pending service requests until dispatched.',
         duration: 7000
       })
     } else {
-      toast.success('Import completed. Searching for imported records...', {
+      toast.success('Import completed.', {
         description: '⚠️ Note: Backend is converting imported records to bookings immediately. This behavior should be changed.',
         duration: 7000
       })
     }
-    
-    // After reload, search for imported records to help user find them
-    // Imported records typically have "Test Customer" in the name or specific patterns
-    setTimeout(() => {
-      const importedNames = importedData?.map((row: any) => {
-        // Try to get the name from various possible fields
-        return row['Patient_Name'] || row['Name'] || row['name'] || row['Customer'] || ''
-      }).filter(Boolean) || []
-      
-      // Find imported records in the loaded requests
-      const foundImported = requests.filter(r => {
-        const name = r.name.toLowerCase()
-        return importedNames.some((importedName: string) => 
-          name.includes(importedName.toLowerCase())
-        ) || name.includes('test customer')
-      })
-      
-      console.log('📊 Service requests after import:', {
-        totalRequests: requests.length,
-        totalPages: Math.ceil(requests.length / itemsPerPage),
-        importedNamesSearched: importedNames.slice(0, 5),
-        foundImportedCount: foundImported.length,
-        foundImportedNames: foundImported.map(r => r.name).slice(0, 10),
-        foundImportedPositions: foundImported.map(r => {
-          const index = requests.findIndex(req => req.id === r.id)
-          return { name: r.name, position: index + 1, page: Math.ceil((index + 1) / itemsPerPage) }
-        }).slice(0, 10),
-        note: foundImported.length > 0 
-          ? `✅ Found ${foundImported.length} imported records. They are on page ${Math.ceil((requests.findIndex(r => r.id === foundImported[0].id) + 1) / itemsPerPage)}`
-          : '⚠️ Imported records not found. They may have different names or be filtered out.'
-      })
-      
-      // If we have imported names, search for them
-      if (importedNames.length > 0) {
-        // Search for the first imported name to help user find the records
-        const searchTerm = importedNames[0] || 'Test Customer'
-        setSearchQuery(searchTerm)
-        setCurrentPage(1) // Reset to first page
-        console.log(`🔍 Auto-searching for imported records: "${searchTerm}"`)
-      } else if (foundImported.length > 0) {
-        // If we found imported records but don't have names, search for "Test Customer"
-        setSearchQuery('Test Customer')
-        setCurrentPage(1)
-        console.log('🔍 Auto-searching for "Test Customer" records')
-      }
-    }, 2000) // Wait for requests to be loaded
   }
 
 

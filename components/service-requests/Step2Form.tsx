@@ -11,7 +11,6 @@ import { cn } from '@/lib/utils';
 import type { ServiceRequestFormData } from '@/app/(protected)/scheduler/service-requests/new/page';
 
 const step2Schema = z.object({
-  credits: z.number().min(0, 'Credits must be 0 or greater').optional(),
   approvedCredits: z.number().min(0, 'Approved credits must be 0 or greater').optional(),
   usedCredits: z.number().min(0, 'Used credits must be 0 or greater').optional(),
   remainingCredits: z.number().min(0, 'Remaining credits is required'),
@@ -30,10 +29,9 @@ export default function Step2Form({ initialData, onNext, onBack }: Step2FormProp
   const form = useForm<z.infer<typeof step2Schema>>({
     resolver: zodResolver(step2Schema),
     defaultValues: {
-      credits: initialData?.credits ?? 0,
-      approvedCredits: initialData?.approvedCredits ?? 0,
-      usedCredits: initialData?.usedCredits ?? 0,
-      remainingCredits: initialData?.remainingCredits ?? 0,
+      approvedCredits: initialData?.approvedCredits ?? undefined,
+      usedCredits: initialData?.usedCredits ?? undefined,
+      remainingCredits: initialData?.remainingCredits ?? undefined,
       notes: initialData?.notes || '',
       startTime: initialData?.startTime || '09:00',
       endTime: initialData?.endTime || '17:00',
@@ -47,37 +45,6 @@ export default function Step2Form({ initialData, onNext, onBack }: Step2FormProp
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-0">
-        {/* Credits */}
-        <FormField
-          control={form.control}
-          name="credits"
-          render={({ field }) => (
-            <FormItem className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 mb-4">
-              <div className="flex items-start">
-                <FormLabel className="font-medium !text-gray-900">
-                  Credits
-                </FormLabel>
-              </div>
-              <div className="flex flex-col gap-2">
-                <FormControl>
-                  <Input
-                    type="number"
-                    min="0"
-                    {...field}
-                    value={field.value ?? ''}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      field.onChange(value === '' ? undefined : Number(value));
-                    }}
-                    className="h-[40px]"
-                  />
-                </FormControl>
-                <FormMessage />
-              </div>
-            </FormItem>
-          )}
-        />
-
         {/* Approved Credits */}
         <FormField
           control={form.control}
@@ -95,11 +62,12 @@ export default function Step2Form({ initialData, onNext, onBack }: Step2FormProp
                     type="number"
                     min="0"
                     {...field}
-                    value={field.value ?? ''}
+                    value={field.value !== undefined && field.value !== null ? field.value : ''}
                     onChange={(e) => {
                       const value = e.target.value;
                       field.onChange(value === '' ? undefined : Number(value));
                     }}
+                    placeholder=""
                     className="h-[40px]"
                   />
                 </FormControl>
@@ -126,11 +94,12 @@ export default function Step2Form({ initialData, onNext, onBack }: Step2FormProp
                     type="number"
                     min="0"
                     {...field}
-                    value={field.value ?? ''}
+                    value={field.value !== undefined && field.value !== null ? field.value : ''}
                     onChange={(e) => {
                       const value = e.target.value;
                       field.onChange(value === '' ? undefined : Number(value));
                     }}
+                    placeholder=""
                     className="h-[40px]"
                   />
                 </FormControl>
@@ -157,11 +126,13 @@ export default function Step2Form({ initialData, onNext, onBack }: Step2FormProp
                     type="number"
                     min="0"
                     {...field}
-                    value={field.value ?? ''}
+                    value={field.value !== undefined && field.value !== null ? field.value : ''}
                     onChange={(e) => {
                       const value = e.target.value;
-                      field.onChange(value === '' ? 0 : Number(value));
+                      // For remaining credits (required), allow empty but validate on submit
+                      field.onChange(value === '' ? undefined : Number(value));
                     }}
+                    placeholder=""
                     className="h-[40px]"
                   />
                 </FormControl>

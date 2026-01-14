@@ -61,6 +61,15 @@ export default function CreditsPage() {
         hasData: !!response.data,
         dataLength: response.data?.length || 0
       });
+      
+      // Verify backend source - check server terminal logs for:
+      // "🔍 ApprovedUserCredits API Request - ENVIRONMENT CHECK:" 
+      // Should show: environment: 'DEV', fullUrl: 'https://gw5cndev.geowise.ai/...'
+      console.log('[Credits Page] Backend Verification:', {
+        note: 'Check server terminal logs for "🔍 ApprovedUserCredits API Request - ENVIRONMENT CHECK:"',
+        expectedDevBackend: 'https://gw5cndev.geowise.ai',
+        instruction: 'Look for "fullUrl" in server logs - if it contains "gw5cndev", credits are from DEV backend'
+      });
 
       if (response.Status === 201 && response.data) {
         setCredits(response.data);

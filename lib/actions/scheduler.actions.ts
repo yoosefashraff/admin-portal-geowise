@@ -80,12 +80,113 @@ export async function listcustomerforscheduler(data: { providerId: number }) : P
   }
 }
 
+export interface CreateCustomerPayload {
+  Name: string;
+  PhoneNumber: string;
+  CountryCode: string;
+  Email: string;
+  Address: string;
+  Lat?: number;
+  Lng?: number;
+  CompanyUserId: number;
+}
+
+export interface CreateCustomerResponse {
+  Status: number;
+  Message?: string;
+  CustomerId?: number;
+  Customer?: Customer;
+}
+
+/**
+ * Create a new customer in the database.
+ * This should be called before creating a booking to ensure the customer exists.
+ * 
+ * TODO: Update the endpoint when backend API is ready.
+ * Expected endpoint: /company/createcustomer or /company/addcustomer
+ */
+export async function createCustomer(data: CreateCustomerPayload): Promise<CreateCustomerResponse> {
+  try {
+    console.log('[createCustomer] 🔍 Creating customer:', {
+      Name: data.Name,
+      PhoneNumber: data.PhoneNumber,
+      CountryCode: data.CountryCode,
+      Email: data.Email,
+      Address: data.Address,
+      CompanyUserId: data.CompanyUserId
+    });
+
+    // TODO: Replace with actual endpoint when backend API is ready
+    // For now, try common endpoint patterns
+    // If endpoint doesn't exist, backend developer will provide the correct one
+    const response: CreateCustomerResponse = await serverAPI.post('/company/createcustomer', data);
+    
+    console.log('[createCustomer] 📥 Response received:', {
+      Status: response.Status,
+      Message: response.Message,
+      CustomerId: response.CustomerId
+    });
+    
+    return response;
+  } catch (err: any) {
+    console.error('[createCustomer] ❌ Error:', {
+      message: err.message,
+      code: err.code,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      data: err.response?.data,
+      requestData: data
+    });
+    
+    // If endpoint doesn't exist (404), return a helpful error
+    if (err.response?.status === 404) {
+      return {
+        Status: 404,
+        Message: 'Customer creation endpoint not found. Please check with backend developer for the correct endpoint.'
+      };
+    }
+    
+    const errorMessage = err.response?.data?.Message || err.response?.statusText || err.message;
+    return {
+      Status: err.response?.status || 500,
+      Message: errorMessage
+    };
+  }
+}
+
 export async function addCustomerBookings(data : SchedulerSubmitData) : Promise<{Status : number, Message : string}>{
   try {
+    console.log('[addCustomerBookings] 🔍 Sending booking data:', {
+      Name: data.Name,
+      PhoneNumber: data.PhoneNumber,
+      CountryCode: data.CountryCode,
+      Email: data.Email,
+      ServiceId: data.ServiceId,
+      CustomerId: data.CustomerId,
+      Address: data.Address,
+      CompanyUserId: data.CompanyUserId,
+      fullPayload: data
+    });
+    
     const response : {Status : number, Message : string} = await serverAPI.post('/company/addcustomerbookings', data);
+    
+    console.log('[addCustomerBookings] 📥 Response received:', {
+      Status: response.Status,
+      Message: response.Message
+    });
+    
     return {Status : response.Status, Message : response.Message};
   } catch (err: any) {
-    const errorMessage = err.response?.statusText || err.message;
-    return {Status : 500, Message : errorMessage};
+    console.error('[addCustomerBookings] ❌ Error:', {
+      message: err.message,
+      code: err.code,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      data: err.response?.data,
+      requestData: data
+    });
+    
+    const errorMessage = err.response?.data?.Message || err.response?.statusText || err.message;
+    return {Status : err.response?.status || 500, Message : errorMessage};
   }
 }

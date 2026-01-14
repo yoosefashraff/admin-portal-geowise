@@ -8,25 +8,61 @@ import type { FetchBookingsParams } from "@/lib/types/calendar";
 
 /**
  * Get API URL for service requests
- * Uses NEXT_PUBLIC_SERVICE_REQUESTS_API_URL if set (for dev testing),
- * otherwise falls back to NEXT_PUBLIC_API_URL (production)
+ * Uses NEXT_PUBLIC_DEV_API_URL if set (for dev testing - applies to whole app),
+ * falls back to NEXT_PUBLIC_SERVICE_REQUESTS_API_URL (legacy),
+ * otherwise uses NEXT_PUBLIC_API_URL (production)
  */
 function getServiceRequestsApiUrl(): string {
-  const devUrl = process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
+  // New dev environment variable (applies to whole app)
+  const devUrl = process.env.NEXT_PUBLIC_DEV_API_URL;
+  // Legacy variable (backward compatibility)
+  const legacyDevUrl = process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
   const prodUrl = process.env.NEXT_PUBLIC_API_URL;
   
-  const apiUrl = devUrl || prodUrl || 'https://gw5cn.geowise.ai';
+  // Remove quotes if present (common mistake in .env files)
+  const cleanDevUrl = devUrl ? devUrl.replace(/^["']|["']$/g, '').trim() : undefined;
+  const cleanLegacyDevUrl = legacyDevUrl ? legacyDevUrl.replace(/^["']|["']$/g, '').trim() : undefined;
+  const cleanProdUrl = prodUrl ? prodUrl.replace(/^["']|["']$/g, '').trim() : undefined;
   
-  // Remove trailing slash
-  const baseUrl = apiUrl.replace(/\/+$/, '');
+  // Use new dev variable first, then legacy
+  const finalDevUrl = cleanDevUrl || cleanLegacyDevUrl;
+  
+  // CRITICAL: Require dev environment - do NOT fall back to production
+  if (!finalDevUrl) {
+    const errorMsg = 'Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.';
+    console.error('❌ Production API disabled:', {
+      reason: 'Production API usage is disabled for testing',
+      requiredEnvVar: 'NEXT_PUBLIC_DEV_API_URL',
+      action: 'Set NEXT_PUBLIC_DEV_API_URL=https://gw5cndev.geowise.ai',
+      note: 'Legacy NEXT_PUBLIC_SERVICE_REQUESTS_API_URL also supported for backward compatibility',
+      devUrl: cleanDevUrl || 'not set',
+      legacyDevUrl: cleanLegacyDevUrl || 'not set',
+      prodUrl: cleanProdUrl || 'not set'
+    });
+    throw new Error(errorMsg);
+  }
+  
+  // Normalize URL - remove trailing slash (axios will add it when needed)
+  // Paths in axios calls start with /, so baseURL should not have trailing slash
+  const baseUrl = finalDevUrl.replace(/\/+$/, '');
+  
+  // Warn if dev environment uses HTTP (should use HTTPS)
+  if (typeof window === 'undefined' && finalDevUrl.startsWith('http://')) {
+    console.warn('⚠️ WARNING: Dev environment URL uses HTTP instead of HTTPS:', {
+      currentUrl: finalDevUrl,
+      recommended: finalDevUrl.replace('http://', 'https://'),
+      reason: 'HTTPS is required to avoid mixed content security issues when frontend is served over HTTPS'
+    });
+  }
   
   // Log which environment is being used
   if (typeof window === 'undefined') {
     console.warn('🔧 Service Requests API URL:', {
-      usingDev: !!devUrl,
-      devUrl: devUrl || 'not set',
-      prodUrl: prodUrl || 'not set',
-      resolvedUrl: baseUrl
+      usingDev: true,
+      devUrl: finalDevUrl,
+      resolvedUrl: baseUrl,
+      protocol: baseUrl.startsWith('https') ? 'HTTPS ✅' : 'HTTP ⚠️',
+      note: cleanLegacyDevUrl ? 'Using legacy NEXT_PUBLIC_SERVICE_REQUESTS_API_URL' : 'Using NEXT_PUBLIC_DEV_API_URL'
     });
   }
   
@@ -40,22 +76,70 @@ function getServiceRequestsApiUrl(): string {
  */
 export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
   const baseURL = getServiceRequestsApiUrl();
-  const cookieStore = await cookies();
-  const token = cookieStore.get('xyzCompAuthorize')?.value;
+  
+  // For dev environment, handle SSL certificate verification issues
+  // The dev backend may use a self-signed certificate or certificate not in Node.js CA store
+  const isDevEnvironment = baseURL.includes('gw5cndev') || baseURL.includes('localhost');
+  const httpsAgent = isDevEnvironment 
+    ? new (require('https').Agent)({
+        rejectUnauthorized: false // Only for dev - allows self-signed certs
+      })
+    : undefined;
   
   const instance = axios.create({
     baseURL,
     timeout: 60000, // 60 seconds for file uploads
     headers: {
       "Content-Type": "application/json",
+      "Accept": "application/json", // Explicitly request JSON responses
+      "X-Requested-With": "XMLHttpRequest", // Tell backend this is an AJAX request (prevents HTML redirects)
     },
+    ...(httpsAgent && { httpsAgent })
   });
   
   // Add request interceptor for authentication and FormData handling
+  // IMPORTANT: Read cookie fresh on each request to ensure we have the latest value
   instance.interceptors.request.use(
-    (config) => {
+    async (config) => {
+      // Read cookie fresh on each request (cookies can change between requests)
+      const cookieStore = await cookies();
+      const cookie = cookieStore.get('xyzCompAuthorize');
+      const token = cookie?.value;
+      
+      // Log all available cookies for debugging
+      const allCookies = cookieStore.getAll();
+      const cookieNames = allCookies.map(c => c.name);
+      
       if (token && config.headers) {
+        // Set Cookie header in the format: Cookie: xyzCompAuthorize=<token>
         config.headers.Cookie = `xyzCompAuthorize=${token}`;
+        console.error('🔐 ===== ADDING AUTHENTICATION COOKIE TO REQUEST =====');
+        console.error('🔐 Adding authentication cookie to request:', {
+          url: config.url,
+          baseURL: config.baseURL,
+          fullUrl: `${config.baseURL}${config.url}`,
+          hasToken: !!token,
+          tokenLength: token?.length || 0,
+          tokenPreview: token ? `${token.substring(0, 30)}...` : 'none',
+          method: config.method?.toUpperCase(),
+          cookieHeader: config.headers.Cookie ? `${config.headers.Cookie.substring(0, 50)}...` : 'not set',
+          allAvailableCookies: cookieNames,
+          cookieHeaderFull: config.headers.Cookie // Show full header for debugging
+        });
+        console.error('🔐 ====================================================');
+      } else {
+        console.error('⚠️ ===== NO AUTHENTICATION TOKEN AVAILABLE =====');
+        console.error('⚠️ No authentication token available for request:', {
+          url: config.url,
+          baseURL: config.baseURL,
+          fullUrl: `${config.baseURL}${config.url}`,
+          cookieFound: !!cookie,
+          cookieHasValue: !!cookie?.value,
+          availableCookies: cookieNames,
+          cookieCount: allCookies.length,
+          action: 'Please ensure you are logged in. Cookie xyzCompAuthorize is required.'
+        });
+        console.error('⚠️ ================================================');
       }
       
       // Remove Content-Type for FormData - axios will set it automatically with boundary
@@ -70,8 +154,85 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
   
   // Add response interceptor to return data directly
   instance.interceptors.response.use(
-    (response) => response.data,
-    (error) => Promise.reject(error)
+    (response) => {
+      // Check Content-Type header first
+      const contentType = response.headers['content-type'] || response.headers['Content-Type'] || '';
+      const isJson = contentType.includes('application/json');
+      const isHtml = contentType.includes('text/html') || contentType.includes('text/plain');
+      
+      // Check if response is HTML (error page) instead of JSON
+      const data = response.data;
+      const isHtmlContent = typeof data === 'string' && (data.includes('<html') || data.includes('<!DOCTYPE') || data.trim().startsWith('<'));
+      
+      if (isHtml || isHtmlContent) {
+        // Extract title or key text from HTML for better error messages
+        let htmlPreview = typeof data === 'string' ? data.substring(0, 1000) : 'not a string';
+        let errorHint = 'Unknown error';
+        if (typeof data === 'string') {
+          // Try to extract title or error message from HTML
+          const titleMatch = data.match(/<title[^>]*>([^<]+)<\/title>/i);
+          const h1Match = data.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+          const errorMatch = data.match(/error[^>]*>([^<]+)/i);
+          if (titleMatch) errorHint = `Page title: ${titleMatch[1]}`;
+          else if (h1Match) errorHint = `Heading: ${h1Match[1]}`;
+          else if (errorMatch) errorHint = `Error text: ${errorMatch[1]}`;
+          else if (data.includes('login') || data.includes('Login')) errorHint = 'Login page (authentication required)';
+          else if (data.includes('404') || data.includes('Not Found')) errorHint = '404 Not Found (endpoint may not exist)';
+          else if (data.includes('401') || data.includes('Unauthorized')) errorHint = '401 Unauthorized (authentication failed)';
+        }
+        
+        console.error('❌ Backend returned HTML instead of JSON:', {
+          url: response.config?.url,
+          baseURL: response.config?.baseURL,
+          fullUrl: `${response.config?.baseURL}${response.config?.url}`,
+          status: response.status,
+          statusText: response.statusText,
+          contentType: contentType || 'not set',
+          errorHint,
+          preview: htmlPreview,
+          requestHeaders: response.config?.headers,
+          responseHeaders: response.headers
+        });
+        // Reject as error so it goes to error handler
+        const error: any = new Error(`Backend returned HTML instead of JSON (status ${response.status}): ${errorHint}`);
+        error.response = {
+          status: response.status,
+          statusText: response.statusText,
+          data: data,
+          headers: response.headers
+        };
+        error.config = response.config;
+        return Promise.reject(error);
+      }
+      
+      // Validate JSON response
+      if (!isJson && typeof data !== 'object' && typeof data !== 'string') {
+        console.warn('⚠️ Unexpected response format:', {
+          contentType,
+          dataType: typeof data,
+          preview: typeof data === 'string' ? data.substring(0, 200) : String(data).substring(0, 200)
+        });
+      }
+      
+      return data;
+    },
+    (error) => {
+      // Enhanced error logging
+      console.error('❌ ServiceRequestsAxios request failed:', {
+        url: error.config?.url,
+        baseURL: error.config?.baseURL,
+        fullUrl: error.config ? `${error.config.baseURL}${error.config.url}` : 'unknown',
+        method: error.config?.method,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        errorCode: error.code,
+        errorMessage: error.message,
+        hasResponse: !!error.response,
+        hasRequest: !!error.request,
+        responseData: error.response?.data ? (typeof error.response.data === 'string' ? error.response.data.substring(0, 200) : JSON.stringify(error.response.data).substring(0, 200)) : 'none'
+      });
+      return Promise.reject(error);
+    }
   );
   
   return instance;
@@ -79,7 +240,8 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
 
 /**
  * Fetch service requests for the current date range
- * Defaults to today's date range
+ * Uses DEV environment if NEXT_PUBLIC_SERVICE_REQUESTS_API_URL is set
+ * This ensures we fetch from the same environment where we import data
  */
 export async function fetchServiceRequests(
   startDate?: string,
@@ -98,7 +260,46 @@ export async function fetchServiceRequests(
     CompanyAdminId: companyAdminId || 0,
   }
 
-  return fetchBookings(params)
+  // CRITICAL: Use dev environment for fetching if configured
+  // This ensures we fetch from the same environment where we import data
+  const baseURL = getServiceRequestsApiUrl(); // This throws if dev not configured
+  
+  console.warn('🔍 Fetching service requests:', {
+    environment: 'DEV',
+    apiUrl: baseURL,
+    dateRange: `${defaultStartDate} to ${defaultEndDate}`,
+    reason: 'Using same environment as imports to ensure data consistency'
+  });
+
+  // Use dev environment axios instance (60s timeout)
+  const serviceRequestsAPI = await createServiceRequestsAxios();
+  
+  try {
+    const response: any = await serviceRequestsAPI.post('/api/barber/FetchBookings', params, {
+      headers: {
+        TimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        DeviceToken: 'test12345',
+        IsTest: 'true'
+      }
+    });
+    
+    console.warn('✅ Fetched service requests from DEV environment:', {
+      status: response.Status,
+      hasObject: !!response.Object,
+      objectType: Array.isArray(response.Object) ? 'array' : typeof response.Object
+    });
+    
+    return response;
+  } catch (err: any) {
+    console.error('❌ Failed to fetch from DEV environment - NOT falling back to production:', {
+      error: err.message,
+      status: err.response?.status,
+      reason: 'Production fallback disabled to ensure dev-only testing',
+      action: 'Please ensure dev backend is running and accessible'
+    });
+    // Do NOT fallback to production - throw error instead
+    throw err;
+  }
 }
 
 /**
@@ -229,7 +430,6 @@ export async function importServiceRequests(
     ];
     
     const endpoint = possibleEndpoints[0]; // Start with the most likely one
-    const isUsingDev = !!process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
     const fullUrl = `${baseURL}${endpoint}`;
     
     console.warn('📤 ServiceRequests Import API Request:', {
@@ -237,20 +437,17 @@ export async function importServiceRequests(
       baseURL,
       fullUrl,
       tryingEndpoints: possibleEndpoints,
-      usingDevEnvironment: isUsingDev,
+      usingDevEnvironment: true,
       protocol: baseURL.startsWith('https') ? 'HTTPS' : 'HTTP',
     });
     
     // CRITICAL: Log where data will be stored
     // Note: Dev environment is for testing, but data should be treated as REAL (realistic locations, real data structure)
     console.warn('⚠️ IMPORT DATA STORAGE LOCATION:', {
-      environment: isUsingDev ? 'DEV (Testing Environment)' : 'PRODUCTION',
+      environment: 'DEV (Testing Environment)',
       apiUrl: baseURL,
-      message: isUsingDev 
-        ? '✅ Data will be stored on DEV environment (testing database, but data is REAL and realistic)'
-        : '⚠️ Data will be stored on PRODUCTION environment (use with caution!)',
-      devUrl: process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
-      prodUrl: process.env.NEXT_PUBLIC_API_URL || 'not set',
+      message: '✅ Data will be stored on DEV environment (testing database, but data is REAL and realistic)',
+      devUrl: process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
       note: 'Dev environment uses separate database for testing, but data structure and locations are realistic'
     });
     

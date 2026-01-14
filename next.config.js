@@ -16,11 +16,30 @@ const nextConfig = {
         hostname: 'gw5cn.geowise.ai',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'gw5cndev.geowise.ai',
+        pathname: '/**',
+      },
     ],
   },
-  // Proxy API calls in development to avoid CORS issues
+  // Proxy API calls in development (optional fallback - CORS is resolved on backend)
   async rewrites() {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://gw5cn.geowise.ai';
+    // Check for dev environment first
+    const devUrl = process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
+    
+    // CRITICAL: Require dev environment - do NOT fall back to production
+    if (!devUrl) {
+      console.warn('⚠️ Next.js proxy: Dev environment not configured. Proxy will not be set up.');
+      console.warn('   Set NEXT_PUBLIC_DEV_API_URL=https://gw5cndev.geowise.ai to enable proxy.');
+      // Return empty rewrites - direct API calls will be used instead
+      return [];
+    }
+    
+    // Use dev environment for proxy
+    const backendUrl = devUrl.replace(/\/+$/, ''); // Remove trailing slash
+    
+    console.warn('✅ Next.js proxy configured for DEV environment:', backendUrl);
     
     return [
       {

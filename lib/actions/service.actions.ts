@@ -12,11 +12,44 @@ interface ServicesForCompanyResponse {
 
 export async function getServicesForCompany(data: CompanyServicesPayload) : Promise<ServicesForCompanyResponse> {
   try {
+    console.log('[getServicesForCompany] 🔄 Fetching services...', {
+      companyAdminId: data.CompanyAdminId,
+      pageNo: data.PageNo,
+      recordsPerPage: data.RecordsPerPage
+    });
+    
     const response: ServicesForCompanyResponse = await serverAPI.post('/company/getallservicesforcompany', data);
+    
+    console.log('[getServicesForCompany] 📥 Response received:', {
+      status: response.Status,
+      message: response.Message,
+      listLength: response.List?.length || 0,
+      totalCount: response.TotalCount,
+      hasList: !!response.List,
+      listType: Array.isArray(response.List) ? 'array' : typeof response.List
+    });
+    
     return response;
   } catch (err: any) {
-    const errorMessage = err.response?.statusText || err.message;
-    return {Status: 500, Message: errorMessage, List: [], TotalCount: 0};
+    console.error('[getServicesForCompany] ❌ Error:', {
+      message: err.message,
+      code: err.code,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      data: err.response?.data,
+      isTimeout: err.code === 'ECONNABORTED' || err.message?.includes('timeout'),
+      isNetworkError: err.code === 'ERR_NETWORK' || err.message === 'Network Error'
+    });
+    
+    const errorMessage = err.response?.statusText || err.message || 'Failed to fetch services';
+    
+    // Return error response instead of throwing to prevent server action 500 error
+    return {
+      Status: err.response?.status || 500, 
+      Message: errorMessage, 
+      List: [], 
+      TotalCount: 0
+    };
   }
 }
 

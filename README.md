@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Company Admin Portal
 
-## Getting Started
+A Next.js admin portal for managing service requests, bookings, providers, and customer credits. Built for Geowise's service dispatch platform.
 
-First, run the development server:
+## Quick Start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) and log in.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Create a `.env.local` file with:
 
-## Learn More
+```env
+NEXT_PUBLIC_API_URL=https://gw5cn.geowise.ai
+NEXT_PUBLIC_SERVICE_REQUESTS_API_URL=https://gw5cndev.geowise.ai  # Dev environment base URL (HTTPS required)
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_key_here
+```
 
-To learn more about Next.js, take a look at the following resources:
+**Important:** 
+- `NEXT_PUBLIC_SERVICE_REQUESTS_API_URL` routes service requests and credits to a dev environment. Leave it unset for production.
+- Dev environment **must use HTTPS** (SSL certificate required) to avoid mixed content security issues when frontend is served over HTTPS.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Key Features
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Service Requests Management** - Create, import, and dispatch service requests
+- **Auto-Dispatch** - Automatically generate bookings from approved credits
+- **Provider Management** - Manage linked users (providers/staff)
+- **Customer Credits** - Track approved, used, and remaining credits per customer
+- **Calendar & Scheduling** - View and manage bookings
+- **Service Zones** - Define geographic service areas
+- **Excel Import** - Bulk import service requests via Excel files
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+app/
+  (auth)/          # Login page
+  (protected)/     # All authenticated routes
+    scheduler/      # Service requests, calendar, availability
+    credits/       # Customer credits management
+    linked-users/  # Provider management
+    services/      # Company services
+    zones/         # Service zones
+    dashboard/     # Main dashboard
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+components/
+  service-requests/  # Service request forms and tables
+  credits/           # Credit management dialogs
+  calendar/          # Calendar components
+  shared/            # Reusable components
+
+lib/
+  actions/           # Server actions (API calls)
+  api/               # Axios instances and config
+  types/             # TypeScript types
+  store/              # Zustand stores (auth, scheduler)
+```
+
+## Development Notes
+
+### Service Requests & Credits
+
+Service requests and credits can be routed to a dev environment by setting `NEXT_PUBLIC_SERVICE_REQUESTS_API_URL`. This is useful for testing imports and auto-dispatch without affecting production data.
+
+When creating a new service request with a new customer name, the backend automatically creates the customer record if `CustomerId` is null.
+
+### Excel Import
+
+The import flow expects specific Excel columns. See `scripts/create-test-excel.js` for the expected format. Imported records are stored in the environment specified by `NEXT_PUBLIC_SERVICE_REQUESTS_API_URL` (or production if not set).
+
+### Auto-Dispatch
+
+Auto-dispatch matches service requests with approved user credits and generates bookings. It only processes requests with remaining credits > 0.
+
+## Tech Stack
+
+- **Next.js 16** (App Router)
+- **React 19** + **TypeScript**
+- **Tailwind CSS** + **shadcn/ui**
+- **Zustand** (state management)
+- **React Hook Form** + **Zod** (forms & validation)
+- **Axios** (API calls)
+
+## Scripts
+
+```bash
+npm run dev      # Start dev server with Turbopack
+npm run build    # Production build
+npm run start    # Start production server
+npm run lint     # Run ESLint
+```
+
+## Notes
+
+- Authentication uses cookies (`xyzCompAuthorize`)
+- API calls use server actions for secure backend communication
+- Google Maps API is required for location autocomplete and map features
+- The project includes a separate `autodispatch-flow` subdirectory (legacy/separate flow)

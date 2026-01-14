@@ -5,54 +5,50 @@ import axios, {
   AxiosRequestConfig,
 } from "axios";
 import { cookies } from "next/headers";
+import https from "https";
 
 // Function to get API base URL - read at runtime to ensure env var is available
 function getApiBaseUrl(): string {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  // Check for dev environment first (NEW - applies to whole app)
+  const devUrl = process.env.NEXT_PUBLIC_DEV_API_URL;
+  // Backward compatibility with old variable name
+  const legacyDevUrl = process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
+  const prodUrl = process.env.NEXT_PUBLIC_API_URL;
   
-  // Log for debugging (server-side only) - use console.warn so it's visible in production
-  if (typeof window === 'undefined') {
-    console.warn('🔍 API Configuration Check:', {
-      envVar: envUrl,
-      hasEnvVar: !!envUrl,
-      nodeEnv: process.env.NODE_ENV,
-      isLocalhost: envUrl?.includes('localhost'),
-      isNetlify: envUrl?.includes('netlify.app'),
-      isGeowise: envUrl?.includes('geowise.ai')
+  // Remove quotes if present (common mistake in .env files)
+  const cleanDevUrl = devUrl ? devUrl.replace(/^["']|["']$/g, '').trim() : undefined;
+  const cleanLegacyDevUrl = legacyDevUrl ? legacyDevUrl.replace(/^["']|["']$/g, '').trim() : undefined;
+  const cleanProdUrl = prodUrl ? prodUrl.replace(/^["']|["']$/g, '').trim() : undefined;
+  
+  // Use dev environment if set (new variable takes precedence over legacy)
+  const finalDevUrl = cleanDevUrl || cleanLegacyDevUrl;
+  
+  // CRITICAL: Require dev environment - do NOT fall back to production
+  if (!finalDevUrl) {
+    const errorMsg = 'Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.';
+    console.error('❌ Production API disabled:', {
+      reason: 'Production API usage is disabled for testing',
+      requiredEnvVar: 'NEXT_PUBLIC_DEV_API_URL',
+      action: 'Set NEXT_PUBLIC_DEV_API_URL=https://gw5cndev.geowise.ai',
+      note: 'Legacy NEXT_PUBLIC_SERVICE_REQUESTS_API_URL also supported for backward compatibility',
+      devUrl: cleanDevUrl || 'not set',
+      legacyDevUrl: cleanLegacyDevUrl || 'not set',
+      prodUrl: cleanProdUrl || 'not set'
     });
-  }
-  
-  // Strict validation - must be set and must point to backend
-  if (!envUrl) {
-    const errorMsg = `❌ NEXT_PUBLIC_API_URL is not set! Please set it to the backend API URL (e.g., https://gw5cn.geowise.ai) in Netlify environment variables.`;
-    console.error(errorMsg);
     throw new Error(errorMsg);
   }
   
-  // Check for invalid URLs (localhost, netlify frontend, etc.)
-  const invalidPatterns = ['localhost', 'netlify.app', '127.0.0.1', '0.0.0.0'];
-  const hasInvalidPattern = invalidPatterns.some(pattern => envUrl.toLowerCase().includes(pattern));
-  
-  if (hasInvalidPattern) {
-    const errorMsg = `❌ Invalid API URL: "${envUrl}". NEXT_PUBLIC_API_URL must be set to the backend API URL (https://gw5cn.geowise.ai), not the frontend URL. Current value appears to be pointing to: ${envUrl.includes('netlify.app') ? 'Netlify frontend' : 'localhost'}. Please check Netlify environment variables.`;
-    console.error(errorMsg);
-    throw new Error(errorMsg);
-  }
-  
-  // Ensure it's pointing to the correct backend domain
-  if (!envUrl.includes('geowise.ai') && !envUrl.includes('gw5cn')) {
-    console.warn('⚠️ WARNING: API URL does not appear to be the Geowise backend:', envUrl);
-  }
-  
-  // Remove trailing slash and ensure no /api suffix
-  let baseUrl = envUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+  // Dev environment is configured - use it
+  // Remove trailing slash (axios handles it correctly with paths starting with /)
+  let baseUrl = finalDevUrl.replace(/\/+$/, '');
   
   if (typeof window === 'undefined') {
-    console.warn('✅ Using API Base URL:', baseUrl);
-    console.warn('📋 Full API configuration:', {
-      originalEnvVar: envUrl,
+    console.warn('✅ Using DEV API Base URL:', baseUrl);
+    console.warn('📋 Dev Environment Configuration:', {
+      originalDevVar: cleanDevUrl || cleanLegacyDevUrl,
       resolvedBaseUrl: baseUrl,
-      isProduction: process.env.NODE_ENV === 'production'
+      environment: 'DEV',
+      note: cleanLegacyDevUrl ? 'Using legacy NEXT_PUBLIC_SERVICE_REQUESTS_API_URL' : 'Using NEXT_PUBLIC_DEV_API_URL'
     });
   }
   
@@ -105,16 +101,31 @@ class ServerAxiosConfig {
     this.accessToken = accessToken;
     this.baseURL = getApiBaseUrl(); // Get URL at runtime
 
+    // For dev environment, handle SSL certificate verification issues
+    // The dev backend may use a self-signed certificate or certificate not in Node.js CA store
+    const isDevEnvironment = this.baseURL.includes('gw5cndev') || this.baseURL.includes('localhost');
+    const httpsAgent = isDevEnvironment 
+      ? new https.Agent({
+          rejectUnauthorized: false // Only for dev - allows self-signed certs
+        })
+      : undefined;
+
     this.instance = axios.create({
       baseURL: this.baseURL,
       headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json", // Explicitly request JSON responses
+        "X-Requested-With": "XMLHttpRequest", // Tell backend this is an AJAX request (prevents HTML redirects)
       },
-      timeout: 25000, // 25 second timeout (Netlify functions timeout at 30s, so we need to fail earlier)
+      timeout: 60000, // 60 second timeout
+      ...(httpsAgent && { httpsAgent })
     });
 
     // Log the actual URL being used - use console.warn so it's visible in production
-    console.warn('🚀 ServerAxiosConfig created with baseURL:', this.baseURL);
+    console.warn('🚀 ServerAxiosConfig created with baseURL:', this.baseURL, {
+      isDevEnvironment,
+      hasHttpsAgent: !!httpsAgent
+    });
 
     this.setupInterceptors();
   }
@@ -197,8 +208,8 @@ class ServerAxiosConfig {
         
         // Enhance timeout error message
         if (isTimeout) {
-          console.error('⏱️ Request timed out after 25 seconds. The backend API may be slow or unresponsive.');
-          error.message = 'Request timeout: The backend API took too long to respond. Please try again or contact support if the issue persists.';
+          console.error('⏱️ Request timed out after 60 seconds. The backend API may be slow or unresponsive.');
+          error.message = 'Request timeout: The backend API took too long to respond (60 seconds). Please try again or contact support if the issue persists.';
         }
         
         // Check if error is a redirect (3xx status)

@@ -2,38 +2,50 @@ import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } f
 
 // Client-side API URL validation
 function getClientApiUrl(): string {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  // Check for dev environment first (NEW - applies to whole app)
+  const devUrl = process.env.NEXT_PUBLIC_DEV_API_URL;
+  // Backward compatibility with old variable name
+  const legacyDevUrl = process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
+  const prodUrl = process.env.NEXT_PUBLIC_API_URL;
   
-  // In development (localhost), use Next.js proxy to avoid CORS issues
-  // In production, use direct backend URL (CORS is configured)
-  if (typeof window !== 'undefined') {
-    const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    
-    if (isDevelopment) {
-      // Use relative path which will be proxied by Next.js rewrites
-      return '/api';
+  // Remove quotes if present (common mistake in .env files)
+  const cleanDevUrl = devUrl ? devUrl.replace(/^["']|["']$/g, '').trim() : undefined;
+  const cleanLegacyDevUrl = legacyDevUrl ? legacyDevUrl.replace(/^["']|["']$/g, '').trim() : undefined;
+  const cleanProdUrl = prodUrl ? prodUrl.replace(/^["']|["']$/g, '').trim() : undefined;
+  
+  // Use dev environment if set (new variable takes precedence over legacy)
+  const finalDevUrl = cleanDevUrl || cleanLegacyDevUrl;
+  
+  // CRITICAL: Require dev environment - do NOT fall back to production
+  if (!finalDevUrl) {
+    const errorMsg = 'Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.';
+    console.error('❌ Production API disabled:', {
+      reason: 'Production API usage is disabled for testing',
+      requiredEnvVar: 'NEXT_PUBLIC_DEV_API_URL',
+      action: 'Set NEXT_PUBLIC_DEV_API_URL=https://gw5cndev.geowise.ai',
+      note: 'Legacy NEXT_PUBLIC_SERVICE_REQUESTS_API_URL also supported for backward compatibility'
+    });
+    // In browser, throw error that can be caught by error boundary
+    if (typeof window !== 'undefined') {
+      throw new Error(errorMsg);
     }
-    
-    // In production, validate the API URL
-    if (envUrl) {
-      if (envUrl.includes('localhost') || envUrl.includes('netlify.app')) {
-        console.error('❌ Invalid API URL in client bundle:', envUrl);
-        console.error('This indicates NEXT_PUBLIC_API_URL was set incorrectly during build.');
-        console.error('Please rebuild with NEXT_PUBLIC_API_URL=https://gw5cn.geowise.ai');
-      }
-      return envUrl;
-    }
+    // On server, throw immediately
+    throw new Error(errorMsg);
   }
   
-  // Fallback: use environment URL or default
-  return envUrl || 'https://gw5cn.geowise.ai';
+  // Dev environment is configured - use it
+  if (typeof window !== 'undefined') {
+    console.warn('🔍 Client-side API using DEV environment:', finalDevUrl);
+  }
+  
+  return finalDevUrl.replace(/\/+$/, ''); // Remove trailing slash
 }
 
 const API_BASE_URL = getClientApiUrl();
 
 const axiosInstance: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 60000, // 60 second timeout
   withCredentials: true,
   headers: {
     "Accept": "application/json",
@@ -54,19 +66,13 @@ axiosInstance.interceptors.response.use(
   async (error: AxiosError) => {
     const status = error.response?.status;
 
-    // Handle CORS errors specifically
+    // Handle network errors (CORS should be resolved, but log if issues persist)
     if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
       const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
-      console.error('🚫 CORS Error: Request blocked by browser CORS policy', {
+      console.error('🚫 Network Error (CORS should be resolved - check backend if this persists):', {
         origin,
         target: error.config?.url ? `${error.config.baseURL}${error.config.url}` : 'unknown',
-        message: 'The backend must allow CORS from this origin. Please verify backend CORS configuration includes:',
-        requiredHeaders: [
-          `Access-Control-Allow-Origin: ${origin}`,
-          'Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers: Content-Type, Authorization',
-          'Access-Control-Allow-Credentials: true'
-        ]
+        message: 'If CORS errors persist, verify backend CORS configuration includes this origin'
       });
     }
 

@@ -9,14 +9,15 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Search, ChevronsUpDown, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ChevronsUpDown, Check, X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { useAuthStore } from '@/lib/store/authStore';
-import { fetchProviderByCompanyId } from '@/lib/actions/provider.actions';
+import { getAllProvidersForCompany } from '@/lib/actions/provider.actions';
 import { Provider } from '@/lib/types/provider.types';
 import CustomPagination from '@/components/shared/CustomPagination';
 import type { ServiceRequestFormData } from '@/app/(protected)/scheduler/service-requests/new/page';
+import { toast } from 'sonner';
 
 const step3Schema = z.object({
   preferredStaff: z.array(z.string()).optional(),
@@ -59,17 +60,71 @@ export default function Step3Form({ initialData, onSubmit, onBack, isSubmitting 
 
   useEffect(() => {
     const loadProviders = async () => {
-      if (!user?.UserID) return;
+      if (!user?.UserID) {
+        console.warn('[Step3Form] No user ID, skipping provider load');
+        setLoading(false);
+        setProviders([]);
+        return;
+      }
       try {
         setLoading(true);
-        const response = await fetchProviderByCompanyId(user.UserID);
-        if (response.Status === 201 && response.Object) {
-          setProviders(response.Object);
+        console.log('[Step3Form] 🔄 Starting to load providers for CompanyAdminId:', user.UserID);
+        
+        // Use getAllProvidersForCompany (same API used successfully in dashboard and availability pages)
+        // Start with smaller page size to avoid timeout, then load more if needed
+        const response = await getAllProvidersForCompany({
+          CompanyAdminId: user.UserID,
+          PageNo: 1,
+          RecordsPerPage: 100, // Reduced from 1000 to avoid timeout - can paginate if needed
+        });
+        
+        console.log('[Step3Form] 📥 Provider response received:', {
+          Status: response.Status,
+          Message: response.Message,
+          ListLength: response.List?.length || 0,
+          TotalCount: response.TotalCount,
+          HasList: !!response.List,
+          ListType: Array.isArray(response.List) ? 'array' : typeof response.List
+        });
+        
+        if (response.Status === 201 && response.List && Array.isArray(response.List)) {
+          setProviders(response.List);
+          console.log(`[Step3Form] ✅ Successfully loaded ${response.List.length} providers`);
+          if (response.List.length === 0) {
+            console.warn('[Step3Form] ⚠️ No providers found. User may need to add providers in Linked Users.');
+          }
+        } else {
+          console.warn('[Step3Form] ⚠️ Provider response not successful:', {
+            Status: response.Status,
+            Message: response.Message,
+            HasList: !!response.List,
+            ListType: typeof response.List
+          });
+          setProviders([]);
+          
+          // Show user-friendly error message
+          if (response.Message && response.Status !== 201) {
+            console.warn('[Step3Form] Error message from backend:', response.Message);
+            // Only show toast for actual errors, not for empty results
+            if (response.Status >= 400) {
+              toast.error(`Failed to load providers: ${response.Message}`);
+            }
+          } else if (response.Status === 500) {
+            toast.error('Failed to load providers. Please check your connection and try again.');
+          }
         }
-      } catch (error) {
-        console.error('Failed to load providers:', error);
+      } catch (error: any) {
+        // This catch should rarely trigger since server action handles errors internally
+        console.error('[Step3Form] ❌ Unexpected error loading providers:', {
+          error: error.message,
+          stack: error.stack,
+          response: error.response,
+          name: error.name
+        });
+        setProviders([]);
       } finally {
         setLoading(false);
+        console.log('[Step3Form] 🏁 Provider loading finished, loading set to false');
       }
     };
 
@@ -78,7 +133,7 @@ export default function Step3Form({ initialData, onSubmit, onBack, isSubmitting 
 
   const filteredProviders = useMemo(() => {
     if (!searchQuery.trim()) return providers;
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.toLowerCase().trim();
     return providers.filter((provider) =>
       provider.ProviderName.toLowerCase().includes(query)
     );
@@ -134,9 +189,8 @@ export default function Step3Form({ initialData, onSubmit, onBack, isSubmitting 
                         }
                       }}
                       onFocus={() => {
-                        if (filteredProviders.length > 0) {
-                          setOpen(true);
-                        }
+                        // Always open dropdown on focus to show loading/empty state
+                        setOpen(true);
                       }}
                       onBlur={() => {
                         setTimeout(() => setOpen(false), 200);
@@ -155,11 +209,18 @@ export default function Step3Form({ initialData, onSubmit, onBack, isSubmitting 
                     </button>
                     {open && (loading ? (
                       <div className="absolute z-50 w-full mt-1.5 bg-white border border-gray-200 rounded-lg shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-1px_rgba(0,0,0,0.06)] p-4">
-                        <div className="text-sm text-gray-500">Loading providers...</div>
+                        <div className="text-sm text-gray-500 flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Loading providers...
+                        </div>
+                      </div>
+                    ) : providers.length === 0 ? (
+                      <div className="absolute z-50 w-full mt-1.5 bg-white border border-gray-200 rounded-lg shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-1px_rgba(0,0,0,0.06)] p-4">
+                        <div className="text-sm text-gray-500">No providers available. Please add providers in Linked Users.</div>
                       </div>
                     ) : filteredProviders.length === 0 ? (
                       <div className="absolute z-50 w-full mt-1.5 bg-white border border-gray-200 rounded-lg shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-1px_rgba(0,0,0,0.06)] p-4">
-                        <div className="text-sm text-gray-500">No providers found</div>
+                        <div className="text-sm text-gray-500">No providers found matching "{searchQuery}"</div>
                       </div>
                     ) : (
                       <div className="absolute z-50 w-full mt-1.5 bg-white border border-gray-200 rounded-lg shadow-[0_4px_6px_-1px_rgba(0,0,0,0.1),0_2px_4px_-1px_rgba(0,0,0,0.06)] animate-in fade-in-0 zoom-in-95 slide-in-from-top-2">
@@ -199,6 +260,11 @@ export default function Step3Form({ initialData, onSubmit, onBack, isSubmitting 
                                   width={24}
                                   height={24}
                                   className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+                                  unoptimized
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.src = '/images/avatar.png';
+                                  }}
                                 />
                                 <span className="flex-1 truncate">{provider.ProviderName}</span>
                               </div>
@@ -287,6 +353,11 @@ export default function Step3Form({ initialData, onSubmit, onBack, isSubmitting 
                             width={20}
                             height={20}
                             className="w-5 h-5 rounded-full object-cover"
+                            unoptimized
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src = '/images/avatar.png';
+                            }}
                           />
                           <span className="text-gray-700">{provider.ProviderName}</span>
                           <button

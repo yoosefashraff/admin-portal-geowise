@@ -3,74 +3,188 @@
 import { cookies } from "next/headers";
 import { LoginRequest } from "@/lib/types/auth.types";
 import serverAPI from "../api/axios-server";
+import axios from "axios";
+import https from "https";
 
-const API = process.env.NEXT_PUBLIC_API_URL;
+// Get API URL - use dev environment if configured (same as other actions)
+function getLoginApiUrl(): string {
+  // Check for dev environment first (NEW - applies to whole app)
+  const devUrl = process.env.NEXT_PUBLIC_DEV_API_URL;
+  // Backward compatibility with old variable name
+  const legacyDevUrl = process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
+  const prodUrl = process.env.NEXT_PUBLIC_API_URL;
+  
+  // Remove quotes if present (common mistake in .env files)
+  const cleanDevUrl = devUrl ? devUrl.replace(/^["']|["']$/g, '').trim() : undefined;
+  const cleanLegacyDevUrl = legacyDevUrl ? legacyDevUrl.replace(/^["']|["']$/g, '').trim() : undefined;
+  const cleanProdUrl = prodUrl ? prodUrl.replace(/^["']|["']$/g, '').trim() : undefined;
+  
+  // Use dev environment if set (new variable takes precedence over legacy)
+  const finalDevUrl = cleanDevUrl || cleanLegacyDevUrl;
+  
+  // CRITICAL: Require dev environment - do NOT fall back to production
+  if (!finalDevUrl) {
+    const errorMsg = 'Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.';
+    console.error('❌ Production API disabled for login:', {
+      reason: 'Production API usage is disabled for testing',
+      requiredEnvVar: 'NEXT_PUBLIC_DEV_API_URL',
+      action: 'Set NEXT_PUBLIC_DEV_API_URL=https://gw5cndev.geowise.ai',
+      note: 'Legacy NEXT_PUBLIC_SERVICE_REQUESTS_API_URL also supported for backward compatibility'
+    });
+    throw new Error(errorMsg);
+  }
+  
+  // Remove trailing slash
+  return finalDevUrl.replace(/\/+$/, '');
+}
 
 export async function loginAction(data: LoginRequest) {
+  const API = getLoginApiUrl();
+  const isUsingDev = !!(process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL);
+  
+  console.warn('🔐 Login Action - Using API:', {
+    environment: 'DEV',
+    apiUrl: API,
+    devUrl: process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
+    note: 'Login will authenticate against DEV backend'
+  });
+  
   if (!API) {
-    const errorMsg = "❌ API URL is not configured. NEXT_PUBLIC_API_URL must be set in Netlify environment variables to https://gw5cn.geowise.ai";
+    const errorMsg = "❌ Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.";
     console.error(errorMsg);
     throw new Error(errorMsg);
   }
   
-  // Validate API URL is not pointing to frontend
-  if (API.includes('netlify.app') || API.includes('localhost')) {
-    const errorMsg = `❌ Invalid API URL: "${API}". NEXT_PUBLIC_API_URL must be set to the backend API (https://gw5cn.geowise.ai), not the frontend URL.`;
+  // Validate API URL is not pointing to frontend (only for production)
+  // Note: This check is now redundant since we require dev environment, but keeping for safety
+  if (!isUsingDev && (API.includes('netlify.app') || API.includes('localhost'))) {
+    const errorMsg = `❌ Invalid API URL: "${API}". API URL must point to a valid backend, not the frontend URL.`;
     console.error(errorMsg);
     throw new Error(errorMsg);
   }
 
   try {
-    // Add timeout to fetch request
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-    let res: Response;
+    const loginUrl = `${API}/company/userlogin`;
+    console.error('🔐 Attempting login to:', {
+      url: loginUrl,
+      environment: isUsingDev ? 'DEV' : 'PRODUCTION',
+      apiUrl: API
+    });
+    
+    // Use axios instead of fetch for better SSL certificate handling (especially for dev environment)
+    // Configure axios to handle self-signed certificates for dev environment
+    const httpsAgent = isUsingDev 
+      ? new https.Agent({
+          rejectUnauthorized: false // Only for dev - allows self-signed certs
+        })
+      : undefined;
+    
+    const axiosConfig: any = {
+      method: 'POST',
+      url: loginUrl,
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      data: data,
+      timeout: 30000, // 30 second timeout
+      ...(httpsAgent && { httpsAgent })
+    };
+    
+    let axiosResponse: any;
     try {
-      res = await fetch(`${API}/company/userlogin`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-    cache: "no-store",
-        signal: controller.signal,
+      axiosResponse = await axios(axiosConfig);
+    } catch (axiosError: any) {
+      console.error('❌ Login axios error:', {
+        errorName: axiosError.name,
+        errorMessage: axiosError.message,
+        errorCode: axiosError.code,
+        url: loginUrl,
+        environment: isUsingDev ? 'DEV' : 'PRODUCTION',
+        status: axiosError.response?.status,
+        statusText: axiosError.response?.statusText
       });
-      clearTimeout(timeoutId);
-    } catch (fetchError: any) {
-      clearTimeout(timeoutId);
-      if (fetchError.name === 'AbortError') {
+      
+      if (axiosError.code === 'ECONNABORTED' || axiosError.message?.includes('timeout')) {
         throw new Error("Request timeout. Please check your internet connection and try again.");
       }
-      if (fetchError.message?.includes('fetch')) {
-        throw new Error("Unable to connect to the server. Please check your API URL configuration.");
+      if (axiosError.code === 'ENOTFOUND' || axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ERR_NETWORK') {
+        const errorMsg = isUsingDev 
+          ? `Unable to connect to dev backend (${API}). Please verify the backend is running and accessible. Error: ${axiosError.message || axiosError.code}`
+          : "Unable to connect to the server. Please check your API URL configuration.";
+        throw new Error(errorMsg);
       }
-      throw new Error(fetchError.message || "Network error occurred. Please try again.");
+      if (axiosError.message?.includes('certificate') || axiosError.code === 'CERT_HAS_EXPIRED' || axiosError.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
+        throw new Error(`SSL certificate error when connecting to ${API}. This might be a self-signed certificate issue. Error: ${axiosError.message}`);
+      }
+      // If we got a response but it's an error status, handle it below
+      if (axiosError.response) {
+        axiosResponse = axiosError.response;
+      } else {
+        throw new Error(axiosError.message || "Network error occurred. Please try again.");
+      }
     }
+    
+    // Convert axios response to fetch-like response format for compatibility
+    const res = {
+      ok: axiosResponse.status >= 200 && axiosResponse.status < 300,
+      status: axiosResponse.status,
+      statusText: axiosResponse.statusText,
+      headers: {
+        get: (name: string) => axiosResponse.headers[name.toLowerCase()] || axiosResponse.headers[name]
+      },
+      json: async () => axiosResponse.data,
+      text: async () => JSON.stringify(axiosResponse.data)
+    } as Response;
 
-    // Handle non-JSON responses
+    // Handle response - axios already parsed JSON
     let json: any = {};
     const contentType = res.headers.get("content-type");
     
-    if (contentType && contentType.includes("application/json")) {
-      try {
-        json = await res.json();
-      } catch (parseError) {
-        const text = await res.text().catch(() => "Unable to read response");
-        throw new Error(`Invalid JSON response from server: ${text.substring(0, 200)}`);
-      }
-    } else {
+    try {
+      json = await res.json();
+      console.error('🔐 Login response received:', {
+        status: res.status,
+        ok: res.ok,
+        hasCookie: !!json.Cookie,
+        cookieLength: json.Cookie?.length || 0,
+        responseKeys: Object.keys(json),
+        message: json.Message || json.message,
+        environment: isUsingDev ? 'DEV' : 'PRODUCTION'
+      });
+    } catch (parseError) {
       const text = await res.text().catch(() => "Unable to read response");
-      throw new Error(text || `Login failed with status ${res.status}`);
+      console.error('❌ Failed to parse login response:', {
+        status: res.status,
+        contentType,
+        textPreview: text.substring(0, 200),
+        environment: isUsingDev ? 'DEV' : 'PRODUCTION'
+      });
+      throw new Error(`Invalid JSON response from server: ${text.substring(0, 200)}`);
     }
 
-  if (!res.ok) {
-      const errorMessage = json.message || json.Message || json.error || `Login failed with status ${res.status}`;
+    if (!res.ok) {
+      const errorMessage = json.message || json.Message || json.error || json.Error || `Login failed with status ${res.status}`;
+      console.error('❌ Login failed:', {
+        status: res.status,
+        statusText: res.statusText,
+        errorMessage,
+        response: json,
+        environment: isUsingDev ? 'DEV' : 'PRODUCTION'
+      });
       throw new Error(errorMessage);
     }
 
     // Ensure we have a cookie value
     if (!json.Cookie) {
+      console.error('❌ No cookie in login response:', {
+        status: res.status,
+        responseKeys: Object.keys(json),
+        responsePreview: JSON.stringify(json).substring(0, 500),
+        environment: isUsingDev ? 'DEV' : 'PRODUCTION'
+      });
       throw new Error("No authentication cookie received from server. Please check your credentials.");
-  }
+    }
 
     try {
   const cookieStore = await cookies();

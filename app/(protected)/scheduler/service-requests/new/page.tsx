@@ -11,9 +11,11 @@ import Step1Form from '@/components/service-requests/Step1Form';
 import Step2Form from '@/components/service-requests/Step2Form';
 import Step3Form from '@/components/service-requests/Step3Form';
 import { useAuthStore } from '@/lib/store/authStore';
-import { apiClient } from '@/lib/api/axios-instance';
 import { toast } from 'sonner';
 import type { ServiceRequest } from '@/lib/types/serviceRequest.types';
+import { addCustomerBookings, createCustomer } from '@/lib/actions/scheduler.actions';
+import type { SchedulerSubmitData } from '@/lib/types/scheduler.types';
+import { getCallingCode } from '@/lib/utils';
 
 export interface ServiceRequestFormData {
   // Step 1
@@ -24,6 +26,7 @@ export interface ServiceRequestFormData {
   service: string;
   recurringPeriod: string;
   expiryDate: string;
+  customerId?: number; // CustomerId after customer is created
   
   // Step 2
   credits: number;
@@ -46,9 +49,95 @@ export default function NewServiceRequestPage() {
   const [formData, setFormData] = useState<Partial<ServiceRequestFormData>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleStep1Next = (data: Partial<ServiceRequestFormData>) => {
-    setFormData((prev) => ({ ...prev, ...data }));
-    setCurrentStep(2);
+  const handleStep1Next = async (data: Partial<ServiceRequestFormData>) => {
+    // Create customer when moving from Step 1 to Step 2
+    // This ensures the customer exists in the database before final submission
+    if (!user) {
+      toast.error('User not authenticated');
+      return;
+    }
+
+    // Validate required fields for customer creation
+    if (!data.name || !data.phoneNumber || !data.countryCode || !data.location) {
+      toast.error('Please fill in all required fields (name, phone, country, location)');
+      return;
+    }
+
+    try {
+      // Parse location data
+      let address = '';
+      let lat = 0;
+      let lng = 0;
+      
+      if (data.location) {
+        try {
+          const locationData = JSON.parse(data.location);
+          address = locationData.Address || locationData.address || locationData.formatted_address || '';
+          lat = locationData.Lat || locationData.lat || locationData.latitude || 0;
+          lng = locationData.Lng || locationData.lng || locationData.longitude || 0;
+        } catch {
+          address = data.location; // Fallback to string if not JSON
+        }
+      }
+
+      // Clean phone number
+      let phoneNumber = data.phoneNumber || '';
+      if (phoneNumber.startsWith('+')) {
+        phoneNumber = phoneNumber.replace(/^\+\d+\s*/, '');
+      }
+      phoneNumber = phoneNumber.replace(/[^\d]/g, '').trim();
+
+      // Convert country code to calling code format
+      const countryCode = getCallingCode(data.countryCode || 'US');
+
+      // Generate placeholder email
+      const placeholderEmail = `noemail-${Date.now()}@placeholder.local`;
+
+      // Create customer
+      console.log('[handleStep1Next] 🔄 Creating customer before moving to Step 2...');
+      const customerResponse = await createCustomer({
+        Name: (data.name || '').trim(),
+        PhoneNumber: phoneNumber,
+        CountryCode: countryCode,
+        Email: placeholderEmail,
+        Address: address.trim(),
+        Lat: lat,
+        Lng: lng,
+        CompanyUserId: user.UserID || 0,
+      });
+
+      if (customerResponse.Status === 201 || customerResponse.Status === 200) {
+        // Customer created successfully
+        const customerId = customerResponse.CustomerId || customerResponse.Customer?.Id;
+        if (customerId) {
+          console.log('[handleStep1Next] ✅ Customer created with ID:', customerId);
+          setFormData((prev) => ({ ...prev, ...data, customerId }));
+          setCurrentStep(2);
+        } else {
+          console.warn('[handleStep1Next] ⚠️ Customer created but no CustomerId returned');
+          // Still proceed - backend might handle it differently
+          setFormData((prev) => ({ ...prev, ...data }));
+          setCurrentStep(2);
+        }
+      } else if (customerResponse.Status === 404) {
+        // Endpoint not found - backend API not ready yet
+        console.warn('[handleStep1Next] ⚠️ Customer creation endpoint not found. Backend API may not be ready yet.');
+        toast.warning('Customer creation API not available. Proceeding without pre-creating customer.');
+        // Still proceed - backend might create customer during booking
+        setFormData((prev) => ({ ...prev, ...data }));
+        setCurrentStep(2);
+      } else {
+        // Error creating customer
+        const errorMsg = customerResponse.Message || 'Failed to create customer';
+        console.error('[handleStep1Next] ❌ Failed to create customer:', errorMsg);
+        toast.error(`Failed to create customer: ${errorMsg}`);
+        // Don't proceed to next step if customer creation fails
+      }
+    } catch (error: any) {
+      console.error('[handleStep1Next] ❌ Error creating customer:', error);
+      toast.error(`Error creating customer: ${error.message || 'Unknown error'}`);
+      // Don't proceed to next step if customer creation fails
+    }
   };
 
   const handleStep2Next = (data: Partial<ServiceRequestFormData>) => {
@@ -92,16 +181,23 @@ export default function NewServiceRequestPage() {
         address = finalData.location || '';
       }
 
-      // Parse service - it might be a JSON string, service ID (number), or service name (text)
+      // Parse service - it might be a JSON string with Id and ServiceName, service ID (number), or service name (text)
       let serviceId = '0';
       let serviceName = finalData.service || 'Unknown Service';
       
+      if (!finalData.service || finalData.service.trim() === '') {
+        toast.error('Service is required');
+        return;
+      }
+
       try {
-        // Try parsing as JSON first
+        // Try parsing as JSON first (from dropdown selection)
         const serviceData = JSON.parse(finalData.service || '{}');
         if (serviceData.Id) {
           serviceId = serviceData.Id.toString();
           serviceName = serviceData.ServiceName || serviceName;
+        } else {
+          throw new Error('Invalid service data');
         }
       } catch {
         // If not JSON, check if it's a numeric ID
@@ -112,21 +208,60 @@ export default function NewServiceRequestPage() {
             serviceId = trimmed;
             serviceName = `Service ${trimmed}`; // Default name
           } else {
-            // It's a service name - we'll use it as-is and let API handle ID lookup
-            // Or use 0 and API will create/find the service
-            serviceId = '0';
-            serviceName = trimmed;
+            // It's a service name - this shouldn't happen with dropdown, but handle gracefully
+            toast.error('Invalid service selected. Please select a service from the dropdown.');
+            return;
           }
+        } else {
+          toast.error('Service is required');
+          return;
         }
+      }
+
+      // Validate service ID is not 0
+      if (serviceId === '0' || !serviceId) {
+        toast.error('Please select a valid service from the dropdown');
+        return;
       }
 
       // Parse phone number - remove country code if included
       let phoneNumber = finalData.phoneNumber || '';
-      const countryCode = finalData.countryCode || 'US';
+      const countryCodeISO = finalData.countryCode || 'US';
       
-      // Remove country code prefix if present
+      // Convert ISO country code (e.g., "EG", "US") to calling code format (e.g., "+20", "+1")
+      // Backend expects calling code format, not ISO code
+      const countryCode = getCallingCode(countryCodeISO);
+      
+      // Remove country code prefix if present in phone number
       if (phoneNumber.startsWith('+')) {
         phoneNumber = phoneNumber.replace(/^\+\d+\s*/, '');
+      }
+      
+      // Clean phone number - remove any non-digit characters (including spaces)
+      // Backend expects digits only, no spaces
+      phoneNumber = phoneNumber.replace(/[^\d]/g, '').trim();
+
+      // Clean and format name - remove extra whitespace, ensure it's not empty
+      const customerName = (finalData.name || '').trim();
+      
+      // Clean address
+      const cleanAddress = (address || '').trim();
+
+      // Validate required fields AFTER cleaning
+      if (!customerName || customerName.length === 0) {
+        toast.error('Name is required');
+        setIsSubmitting(false);
+        return;
+      }
+      if (!phoneNumber || phoneNumber.length === 0) {
+        toast.error('Phone number is required');
+        setIsSubmitting(false);
+        return;
+      }
+      if (!cleanAddress || cleanAddress.length === 0) {
+        toast.error('Address is required');
+        setIsSubmitting(false);
+        return;
       }
 
       // Get preferred staff provider IDs
@@ -151,16 +286,23 @@ export default function NewServiceRequestPage() {
       const timingSlot = `${startTime}-${endTime}`;
 
       // Prepare booking data
+      // Generate a placeholder email if not provided (backend requires email field)
+      // Format: noemail-{timestamp}@placeholder.local to avoid conflicts with real emails
+      const placeholderEmail = `noemail-${Date.now()}@placeholder.local`;
+      
+      // Use existing CustomerId if customer was created in Step 1, otherwise null
+      const customerId = finalData.customerId ? finalData.customerId.toString() : null;
+
       const bookingData = {
         ServiceId: serviceId,
-        CustomerId: null, // Will be created if doesn't exist
+        CustomerId: customerId, // Use existing CustomerId if customer was created in Step 1
         Date: dateStr,
         TimingSlot: timingSlot,
-        Name: finalData.name || '',
-        PhoneNumber: phoneNumber,
-        Email: 'customer@example.com', // Default email
-        CountryCode: countryCode,
-        Address: address,
+        Name: customerName, // Already trimmed and validated
+        PhoneNumber: phoneNumber, // Already cleaned (digits only) and validated
+        Email: placeholderEmail, // Placeholder email since form doesn't collect email
+        CountryCode: countryCode, // Now in calling code format (e.g., "+20" instead of "EG")
+        Address: cleanAddress, // Already trimmed and validated
         Lat: lat,
         Lng: lng,
         ProviderId: providerId,
@@ -169,8 +311,38 @@ export default function NewServiceRequestPage() {
         IsBarberBooking: false, // Service request, not barber booking
       };
 
-      // Submit to API
-      const response = await apiClient.post<{Status: number, Message: string}>('/company/addcustomerbookings', bookingData);
+      console.warn('🔍 Creating service request (new customer):', {
+        customerName: finalData.name,
+        phoneNumber: phoneNumber,
+        countryCode: countryCode,
+        customerId: bookingData.CustomerId,
+        serviceId: bookingData.ServiceId,
+        address: address,
+        fullBookingData: bookingData,
+        reason: 'Using server action to avoid CORS issues'
+      });
+
+      // Submit via server action (avoids CORS issues)
+      // Server action uses serverAPI which is server-side and handles dev environment automatically
+      const bookingPayload: SchedulerSubmitData = {
+        ServiceId: bookingData.ServiceId,
+        CustomerId: bookingData.CustomerId,
+        Date: bookingData.Date,
+        TimingSlot: bookingData.TimingSlot,
+        Name: bookingData.Name,
+        PhoneNumber: bookingData.PhoneNumber,
+        Email: bookingData.Email,
+        CountryCode: bookingData.CountryCode,
+        Address: bookingData.Address,
+        Lat: bookingData.Lat,
+        Lng: bookingData.Lng,
+        ProviderId: bookingData.ProviderId,
+        CompanyUserId: bookingData.CompanyUserId,
+        AssociationType: bookingData.AssociationType,
+        IsBarberBooking: bookingData.IsBarberBooking,
+      };
+
+      const response = await addCustomerBookings(bookingPayload);
 
       if (response.Status === 201) {
         toast.success('Service request created successfully!');
@@ -205,7 +377,8 @@ export default function NewServiceRequestPage() {
       }
     } catch (error: any) {
       console.error('Error creating service request:', error);
-      toast.error(error.message || 'Failed to create service request');
+      const errorMessage = error.response?.data?.Message || error.message || 'Failed to create service request';
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
