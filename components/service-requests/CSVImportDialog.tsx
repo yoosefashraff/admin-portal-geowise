@@ -329,9 +329,10 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
         }
 
         // Show specific error if import failed (no success count)
-        if (successCount === 0 && response.data?.errors?.length > 0) {
+        const errorCount = response.data?.errors?.length ?? 0;
+        if (successCount === 0 && errorCount > 0) {
           toast.error(
-            `Import failed: ${response.data.errors.length} error(s). Check console for details.`,
+            `Import failed: ${errorCount} error(s). Check console for details.`,
             { duration: 8000 }
           );
         }
