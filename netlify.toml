@@ -19,10 +19,3 @@
 # Or uncomment below to set in this file:
 # [context.dev.environment]
 #   NEXT_PUBLIC_DEV_API_URL = "https://gw5cndev.geowise.ai"
-
-[functions]
-  node_bundler = "esbuild"
-
-[functions."*"]
-  # Increase function duration to 26s (max for synchronous requests on Netlify)
-  duration = 26
