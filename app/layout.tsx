@@ -21,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi" className="overflow-hidden">
+    <html lang="en" className="overflow-hidden" suppressHydrationWarning>
       <body className={saira.className} suppressHydrationWarning>
         {children}
         <Toaster position="top-right" richColors />

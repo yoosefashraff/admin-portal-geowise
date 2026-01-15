@@ -14,6 +14,7 @@
     "@fullcalendar/react": "^6.1.20",
     "@fullcalendar/resource-timeline": "^6.1.20",
     "@fullcalendar/scrollgrid": "^6.1.20",
+    "@google/genai": "^1.36.0",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",

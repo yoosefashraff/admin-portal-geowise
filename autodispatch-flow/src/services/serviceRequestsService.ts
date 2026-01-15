@@ -1,15 +1,47 @@
 // API Base URL - matches backend configuration
 // In development, use Vite proxy to avoid CORS issues
-// In production, use direct API URL
-const API_BASE_URL = import.meta.env.DEV 
-  ? '/api' // Use Vite proxy in development
-  : 'https://gw5cn.geowise.ai' // Direct URL in production
+// In production, use direct API URL (always HTTPS)
+function getApiBaseUrl(): string {
+  // Check for DEV environment variable (same as main app)
+  const devUrl = import.meta.env.VITE_DEV_API_URL || import.meta.env.VITE_SERVICE_REQUESTS_API_URL;
+  
+  if (import.meta.env.DEV) {
+    // Development: Use Vite proxy (which proxies to DEV backend)
+    return '/api';
+  } else {
+    // Production: Use direct URL (always HTTPS)
+    // If DEV URL is set, use it (for testing), but ensure it's HTTPS
+    if (devUrl) {
+      let url = devUrl.replace(/^["']|["']$/g, '').trim();
+      // Ensure HTTPS in production (fix mixed content errors)
+      if (url.startsWith('http://')) {
+        url = url.replace('http://', 'https://');
+        console.warn('⚠️ [Auto-Dispatch] Converted HTTP to HTTPS for production:', url);
+      }
+      // If no protocol, assume HTTPS
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = `https://${url}`;
+      }
+      return url;
+    }
+    return 'https://gw5cn.geowise.ai';
+  }
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 /**
  * Get cookies from browser and format as Cookie header value
+ * Note: For cross-origin requests, browsers may block manually set Cookie headers.
+ * We rely on credentials: 'include' for automatic cookie handling.
  */
 function getCookieHeader(): string {
-  return document.cookie
+  // Return cookies for logging/debugging, but browsers handle cookies via credentials: 'include'
+  const cookies = document.cookie;
+  if (!cookies) {
+    console.warn('⚠️ [Auto-Dispatch] No cookies found in document.cookie. Make sure you are logged in.');
+  }
+  return cookies;
 }
 
 export interface BookingRequest {
@@ -61,6 +93,22 @@ export async function fetchBookings(params: BookingRequest): Promise<Booking[]> 
 
     if (!response.ok) {
       const errorText = await response.text()
+      if (response.status === 401) {
+        console.error('❌ [Auto-Dispatch] Authentication failed (401) when fetching bookings. Possible causes:', {
+          status: 401,
+          url: `${API_BASE_URL}/api/barber/FetchBookings`,
+          apiBaseUrl: API_BASE_URL,
+          hasCookies: !!document.cookie,
+          cookieLength: document.cookie.length,
+          possibleCauses: [
+            'Session expired - user needs to log in again',
+            'Cookies not being sent due to CORS/SameSite policy',
+            'Backend authentication service unavailable',
+            'API URL mismatch (check HTTPS vs HTTP)'
+          ]
+        });
+        throw new Error('Authentication failed. Your session may have expired. Please log out and log back in, then try again.');
+      }
       throw new Error(`Failed to fetch bookings: ${response.status} ${errorText}`)
     }
 

@@ -28,21 +28,21 @@ export function ProfilePanel({ name }: profilePanelProps) {
      ${active === id ? "bg-[#F9FAFB]" : ""}`;
 
   return (
-      <div className="flex items-center pt-[5px] pb-[16px] gap-8 border-b border-[#E4E7EC]">
-        <div className="basis-1/2 text-[#101828] text-[18px] font-medium leading-[28px]">{current?.label ?? ""}</div>
-        <div className="basis-1/2">
-          <div className="flex items-center gap-0 rounded-[8px] border border-gray-300 overflow-hidden w-fit shadow-[0px_1px_2px_0px_#1018280D]">
-              {links.map((item) => (
-                <Link href={item.url}
-                  key={item.id}
-                  onClick={() => setActive(item.id)}
-                  className={linkClass(item.id)}
-                >
-                  {item.label}
-                </Link>
-              ))}
-          </div>
+    <div className="flex items-center pt-[5px] pb-[16px] gap-8 border-b border-[#E4E7EC]">
+      <div className="basis-1/2 text-[#101828] text-[18px] font-medium leading-[28px]">{current?.label ?? ""}</div>
+      <div className="basis-1/2">
+        <div className="flex items-center gap-0 rounded-[8px] border border-gray-300 overflow-hidden w-fit shadow-[0px_1px_2px_0px_#1018280D]">
+          {links.map((item) => (
+            <Link href={item.url}
+              key={item.id}
+              onClick={() => setActive(item.id)}
+              className={linkClass(item.id)}
+            >
+              {item.label}
+            </Link>
+          ))}
         </div>
       </div>
+    </div>
   );
 }

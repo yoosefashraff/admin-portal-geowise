@@ -140,10 +140,12 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
               
               serviceRequestsResponse.Object.forEach((callout: any) => {
                 // CRITICAL: Extract CUSTOMER fields only, NOT provider fields
-                // Customer fields: UserId, UserName, Customer, Patient_Name
-                // Provider fields (DO NOT USE): BarberId, ProviderId, BarberUserName, ProviderName
+                // Customer fields: UserId, Customer, Patient_Name, Name
+                // Provider fields (DO NOT USE): BarberId, ProviderId, BarberUserName, ProviderName, UserName (ambiguous!)
                 const userId = callout.UserId || callout.userId || callout.UserID;
-                const customerName = callout.Customer || callout.Patient_Name || callout.UserName || callout.userName;
+                // IMPORTANT: Do NOT use UserName - it's ambiguous and might be provider username
+                // Only use Customer and Patient_Name which are clearly customer fields
+                const customerName = callout.Customer || callout.Patient_Name || callout.Name || callout.name || '';
                 const phone = callout.PhoneNumber || callout.phoneNumber || callout.Mobile_Number || callout.Contact;
                 const email = callout.Email || callout.email;
                 

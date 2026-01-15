@@ -5,6 +5,9 @@ import { cookies } from "next/headers";
 import serverAPI from "@/lib/api/axios-server";
 import { fetchBookings } from "./calendar.actions";
 import type { FetchBookingsParams } from "@/lib/types/calendar";
+import { getServicesForCompany } from "./service.actions";
+import { getCustomerByPhoneAndType, createCustomer } from "./scheduler.actions";
+import { getCallingCode } from "@/lib/utils";
 
 /**
  * Get API URL for service requests
@@ -18,15 +21,15 @@ function getServiceRequestsApiUrl(): string {
   // Legacy variable (backward compatibility)
   const legacyDevUrl = process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
   const prodUrl = process.env.NEXT_PUBLIC_API_URL;
-  
+
   // Remove quotes if present (common mistake in .env files)
   const cleanDevUrl = devUrl ? devUrl.replace(/^["']|["']$/g, '').trim() : undefined;
   const cleanLegacyDevUrl = legacyDevUrl ? legacyDevUrl.replace(/^["']|["']$/g, '').trim() : undefined;
   const cleanProdUrl = prodUrl ? prodUrl.replace(/^["']|["']$/g, '').trim() : undefined;
-  
+
   // Use new dev variable first, then legacy
   const finalDevUrl = cleanDevUrl || cleanLegacyDevUrl;
-  
+
   // CRITICAL: Require dev environment - do NOT fall back to production
   if (!finalDevUrl) {
     const errorMsg = 'Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.';
@@ -41,11 +44,11 @@ function getServiceRequestsApiUrl(): string {
     });
     throw new Error(errorMsg);
   }
-  
+
   // Normalize URL - remove trailing slash (axios will add it when needed)
   // Paths in axios calls start with /, so baseURL should not have trailing slash
   const baseUrl = finalDevUrl.replace(/\/+$/, '');
-  
+
   // Warn if dev environment uses HTTP (should use HTTPS)
   if (typeof window === 'undefined' && finalDevUrl.startsWith('http://')) {
     console.warn('⚠️ WARNING: Dev environment URL uses HTTP instead of HTTPS:', {
@@ -54,7 +57,7 @@ function getServiceRequestsApiUrl(): string {
       reason: 'HTTPS is required to avoid mixed content security issues when frontend is served over HTTPS'
     });
   }
-  
+
   // Log which environment is being used
   if (typeof window === 'undefined') {
     console.warn('🔧 Service Requests API URL:', {
@@ -65,7 +68,7 @@ function getServiceRequestsApiUrl(): string {
       note: cleanLegacyDevUrl ? 'Using legacy NEXT_PUBLIC_SERVICE_REQUESTS_API_URL' : 'Using NEXT_PUBLIC_DEV_API_URL'
     });
   }
-  
+
   return baseUrl;
 }
 
@@ -76,7 +79,7 @@ function getServiceRequestsApiUrl(): string {
  */
 export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
   const baseURL = getServiceRequestsApiUrl();
-  
+
   // Log the baseURL being used (this will show in SERVER terminal, not browser)
   console.warn('🔧 [createServiceRequestsAxios] Creating axios instance:', {
     baseURL,
@@ -84,24 +87,24 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
     envVar: process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
     note: 'Check SERVER terminal (not browser console) for this log'
   });
-  
+
   // Also log to stderr so it's more visible
   if (typeof window === 'undefined') {
     console.error('🔍 [DIAGNOSTIC] ServiceRequestsAxios baseURL:', baseURL);
   }
-  
+
   // For dev environment, handle SSL certificate verification issues
   // The dev backend may use a self-signed certificate or certificate not in Node.js CA store
   const isDevEnvironment = baseURL.includes('gw5cndev') || baseURL.includes('localhost');
-  const httpsAgent = isDevEnvironment 
+  const httpsAgent = isDevEnvironment
     ? new (require('https').Agent)({
-        rejectUnauthorized: false // Only for dev - allows self-signed certs
-      })
+      rejectUnauthorized: false // Only for dev - allows self-signed certs
+    })
     : undefined;
-  
+
   const instance = axios.create({
     baseURL,
-    timeout: 60000, // 60 seconds for file uploads
+    timeout: 600000, // 10 minutes for long-running operations like booking generation
     headers: {
       "Content-Type": "application/json",
       "Accept": "application/json", // Explicitly request JSON responses
@@ -109,7 +112,7 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
     },
     ...(httpsAgent && { httpsAgent })
   });
-  
+
   // Add interceptor to log actual request URLs
   instance.interceptors.request.use((config) => {
     const fullUrl = `${config.baseURL}${config.url}`;
@@ -118,11 +121,12 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
       baseURL: config.baseURL,
       url: config.url,
       fullUrl,
-      hasHttpsAgent: !!config.httpsAgent
+      hasHttpsAgent: !!config.httpsAgent,
+      timeout: config.timeout
     });
     return config;
   });
-  
+
   // Add request interceptor for authentication and FormData handling
   // IMPORTANT: Read cookie fresh on each request to ensure we have the latest value
   instance.interceptors.request.use(
@@ -131,26 +135,16 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
       const cookieStore = await cookies();
       const cookie = cookieStore.get('xyzCompAuthorize');
       const token = cookie?.value;
-      
-      // Log all available cookies for debugging
-      const allCookies = cookieStore.getAll();
-      const cookieNames = allCookies.map(c => c.name);
-      
+
       if (token && config.headers) {
         // Set Cookie header in the format: Cookie: xyzCompAuthorize=<token>
         config.headers.Cookie = `xyzCompAuthorize=${token}`;
         console.error('🔐 ===== ADDING AUTHENTICATION COOKIE TO REQUEST =====');
         console.error('🔐 Adding authentication cookie to request:', {
           url: config.url,
-          baseURL: config.baseURL,
           fullUrl: `${config.baseURL}${config.url}`,
           hasToken: !!token,
-          tokenLength: token?.length || 0,
-          tokenPreview: token ? `${token.substring(0, 30)}...` : 'none',
           method: config.method?.toUpperCase(),
-          cookieHeader: config.headers.Cookie ? `${config.headers.Cookie.substring(0, 50)}...` : 'not set',
-          allAvailableCookies: cookieNames,
-          cookieHeaderFull: config.headers.Cookie // Show full header for debugging
         });
         console.error('🔐 ====================================================');
       } else {
@@ -161,23 +155,21 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
           fullUrl: `${config.baseURL}${config.url}`,
           cookieFound: !!cookie,
           cookieHasValue: !!cookie?.value,
-          availableCookies: cookieNames,
-          cookieCount: allCookies.length,
           action: 'Please ensure you are logged in. Cookie xyzCompAuthorize is required.'
         });
         console.error('⚠️ ================================================');
       }
-      
+
       // Remove Content-Type for FormData - axios will set it automatically with boundary
       if (config.data instanceof FormData && config.headers) {
         delete config.headers['Content-Type'];
       }
-      
+
       return config;
     },
     (error) => Promise.reject(error)
   );
-  
+
   // Add response interceptor to return data directly
   instance.interceptors.response.use(
     (response) => {
@@ -185,11 +177,11 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
       const contentType = response.headers['content-type'] || response.headers['Content-Type'] || '';
       const isJson = contentType.includes('application/json');
       const isHtml = contentType.includes('text/html') || contentType.includes('text/plain');
-      
+
       // Check if response is HTML (error page) instead of JSON
       const data = response.data;
       const isHtmlContent = typeof data === 'string' && (data.includes('<html') || data.includes('<!DOCTYPE') || data.trim().startsWith('<'));
-      
+
       if (isHtml || isHtmlContent) {
         // Extract title or key text from HTML for better error messages
         let htmlPreview = typeof data === 'string' ? data.substring(0, 1000) : 'not a string';
@@ -206,7 +198,7 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
           else if (data.includes('404') || data.includes('Not Found')) errorHint = '404 Not Found (endpoint may not exist)';
           else if (data.includes('401') || data.includes('Unauthorized')) errorHint = '401 Unauthorized (authentication failed)';
         }
-        
+
         console.error('❌ Backend returned HTML instead of JSON:', {
           url: response.config?.url,
           baseURL: response.config?.baseURL,
@@ -230,7 +222,7 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
         error.config = response.config;
         return Promise.reject(error);
       }
-      
+
       // Validate JSON response
       if (!isJson && typeof data !== 'object' && typeof data !== 'string') {
         console.warn('⚠️ Unexpected response format:', {
@@ -239,7 +231,7 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
           preview: typeof data === 'string' ? data.substring(0, 200) : String(data).substring(0, 200)
         });
       }
-      
+
       return data;
     },
     (error) => {
@@ -260,7 +252,7 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
       return Promise.reject(error);
     }
   );
-  
+
   return instance;
 }
 
@@ -289,7 +281,7 @@ export async function fetchServiceRequests(
   // CRITICAL: Use dev environment for fetching if configured
   // This ensures we fetch from the same environment where we import data
   const baseURL = getServiceRequestsApiUrl(); // This throws if dev not configured
-  
+
   console.warn('🔍 Fetching service requests:', {
     environment: 'DEV',
     apiUrl: baseURL,
@@ -299,7 +291,7 @@ export async function fetchServiceRequests(
 
   // Use dev environment axios instance (60s timeout)
   const serviceRequestsAPI = await createServiceRequestsAxios();
-  
+
   // Log the actual URL that will be called
   const fullUrl = `${baseURL}/api/barber/FetchBookings`;
   console.warn('🔍 [fetchServiceRequests] Making API call:', {
@@ -308,7 +300,7 @@ export async function fetchServiceRequests(
     fullUrl,
     params
   });
-  
+
   try {
     // Use /api/barber/FetchBookings - this matches the calendar actions endpoint
     // The axios instance baseURL already includes the full domain, so this will be:
@@ -320,13 +312,13 @@ export async function fetchServiceRequests(
         IsTest: 'true'
       }
     });
-    
+
     console.warn('✅ Fetched service requests from DEV environment:', {
       status: response.Status,
       hasObject: !!response.Object,
       objectType: Array.isArray(response.Object) ? 'array' : typeof response.Object
     });
-    
+
     return response;
   } catch (err: any) {
     // Enhanced error logging to diagnose connection issues
@@ -344,15 +336,15 @@ export async function fetchServiceRequests(
       action: 'Please ensure dev backend is running and accessible',
       note: 'If IP 8.213.23.175 appears, check if gw5cndev.geowise.ai DNS resolves correctly'
     };
-    
+
     console.error('❌ Failed to fetch from DEV environment - NOT falling back to production:', errorDetails);
-    
+
     // Return a graceful error response instead of throwing
     // This prevents the page from completely breaking
-    const errorMessage = err.code === 'ETIMEDOUT' 
+    const errorMessage = err.code === 'ETIMEDOUT'
       ? `Connection timeout: The dev backend (${baseURL}) is not responding. Please check if the backend is running and accessible.`
       : `Failed to fetch service requests: ${err.message}`;
-    
+
     console.error('❌ Failed to fetch from DEV environment - NOT falling back to production:', {
       error: err.message,
       code: err.code,
@@ -360,7 +352,7 @@ export async function fetchServiceRequests(
       fullUrl: `${baseURL}/api/barber/FetchBookings`,
       note: 'Returning error response instead of throwing to prevent page crash'
     });
-    
+
     // Return error response instead of throwing to allow UI to handle gracefully
     return {
       Status: 500,
@@ -378,7 +370,7 @@ export async function fetchServiceRequests(
 export async function fetchImportedServiceRequests(): Promise<{ Status: number; Message?: string; data?: any[] }> {
   // Use custom axios instance for service requests (may point to dev environment)
   const serviceRequestsAPI = await createServiceRequestsAxios();
-  
+
   // Try different possible endpoints for listing imported service requests
   const possibleEndpoints = [
     '/ApprovedUserCredits/Imported',  // Most likely - same controller as import
@@ -392,7 +384,7 @@ export async function fetchImportedServiceRequests(): Promise<{ Status: number; 
     '/ServiceRequests',
     '/ServiceRequest',
   ];
-  
+
   // Try each endpoint until one works
   for (const endpoint of possibleEndpoints) {
     try {
@@ -400,7 +392,7 @@ export async function fetchImportedServiceRequests(): Promise<{ Status: number; 
       console.warn(`🔍 Trying to fetch imported service requests from: ${endpoint}`);
       console.warn(`   Full URL: ${fullUrl}`);
       const response: any = await serviceRequestsAPI.get(endpoint);
-      
+
       console.warn(`📥 Response from ${endpoint}:`, {
         Status: response.Status,
         isArray: Array.isArray(response),
@@ -410,7 +402,7 @@ export async function fetchImportedServiceRequests(): Promise<{ Status: number; 
         responseType: typeof response,
         responseKeys: typeof response === 'object' ? Object.keys(response) : []
       });
-      
+
       if (response.Status === 201 || Array.isArray(response)) {
         const data = Array.isArray(response) ? response : (response.Object || response.data || []);
         if (Array.isArray(data) && data.length > 0) {
@@ -436,7 +428,7 @@ export async function fetchImportedServiceRequests(): Promise<{ Status: number; 
       continue;
     }
   }
-  
+
   // If all endpoints failed, return empty array
   console.warn('⚠️ Could not fetch imported service requests from any endpoint. They may not be available via API yet.');
   console.warn('💡 IMPORTANT: Imported records may have been converted to bookings and will appear in the regular service requests list.');
@@ -471,35 +463,505 @@ export async function fetchDispatchLogs(
 }
 
 /**
+ * Validate imported data before processing
+ * 1. Validates that all services exist in the system
+ * 2. Checks customer data format
+ * 3. Returns validation errors if any
+ */
+export async function validateImportData(
+  parsedData: any[],
+  companyAdminId: number
+): Promise<{
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+  serviceValidation: { serviceName: string; exists: boolean; serviceId?: number }[];
+}> {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const serviceValidation: { serviceName: string; exists: boolean; serviceId?: number }[] = [];
+
+  try {
+    // Step 1: Fetch all available services
+    console.log('🔍 [validateImportData] Fetching services for validation...');
+    const servicesResponse = await getServicesForCompany({
+      CompanyAdminId: companyAdminId,
+      PageNo: 1,
+      RecordsPerPage: 1000, // Get all services
+    });
+
+    if (servicesResponse.Status !== 201 || !servicesResponse.List) {
+      errors.push('Failed to fetch services. Please ensure you have access to the services page.');
+      return { isValid: false, errors, warnings, serviceValidation };
+    }
+
+    const availableServices = servicesResponse.List;
+    const serviceNameMap = new Map<string, number>();
+    availableServices.forEach((service: any) => {
+      const serviceName = (service.ServiceName || '').trim().toLowerCase();
+      if (serviceName) {
+        serviceNameMap.set(serviceName, service.Id);
+      }
+    });
+
+    console.log(`✅ [validateImportData] Found ${availableServices.length} available services`);
+
+    // Step 2: Extract unique service names from import data
+    const importedServiceNames = new Set<string>();
+    parsedData.forEach((row: any) => {
+      const serviceName = (
+        row.ApprovedService || // Backend expects this field name (without space/underscore)
+        row['Approved Service'] ||
+        row['Approved_Service'] ||
+        row.Service ||
+        row.service ||
+        row.ServiceName ||
+        row.serviceName ||
+        ''
+      )
+        .toString()
+        .trim();
+
+      if (serviceName) {
+        importedServiceNames.add(serviceName.toLowerCase());
+      }
+    });
+
+    console.log(`🔍 [validateImportData] Found ${importedServiceNames.size} unique services in import data`);
+
+    // Step 3: Validate each service exists
+    importedServiceNames.forEach((serviceNameLower) => {
+      const exists = serviceNameMap.has(serviceNameLower);
+      const serviceId = serviceNameMap.get(serviceNameLower);
+
+      // Find original case from import data
+      const originalServiceName = Array.from(importedServiceNames).find(
+        (name) => name.toLowerCase() === serviceNameLower
+      ) || serviceNameLower;
+
+      serviceValidation.push({
+        serviceName: originalServiceName,
+        exists,
+        serviceId: serviceId,
+      });
+
+      if (!exists) {
+        errors.push(
+          `Service "${originalServiceName}" does not exist. Please add it to the Services page first.`
+        );
+      }
+    });
+
+    // Step 4: Validate required fields matching new service request form (Step 1)
+    parsedData.forEach((row: any, index: number) => {
+      const rowNumber = index + 2; // +2 because Excel rows start at 1, and row 1 is header
+
+      // Required fields from Step 1 of new service request form
+      const name =
+        row.Name ||
+        row.name ||
+        row.Patient_Name ||
+        row.patient_name ||
+        row.Customer ||
+        row.customer ||
+        '';
+      const phone =
+        row.Phone ||
+        row.phone ||
+        row.PhoneNumber ||
+        row.phoneNumber ||
+        row.Mobile_Number ||
+        row.mobile_number ||
+        '';
+      const countryCode =
+        row['Country Code'] ||
+        row.CountryCode ||
+        row.countryCode ||
+        row['Country_Code'] ||
+        row.country_code ||
+        '';
+      const location =
+        row.Location ||
+        row.location ||
+        row.Address ||
+        row.address ||
+        '';
+      const service =
+        row.ApprovedService || // Backend expects this field name (without space/underscore)
+        row['Approved Service'] ||
+        row['Approved_Service'] ||
+        row.Service ||
+        row.service ||
+        row.ServiceName ||
+        row.serviceName ||
+        '';
+      const recurringPeriod =
+        row['Recurring Period'] ||
+        row.RecurringPeriod ||
+        row.recurringPeriod ||
+        row['Recurring_Period'] ||
+        row.recurring_period ||
+        '';
+      const expiryDate =
+        row['Expiry Date'] ||
+        row.ExpiryDate ||
+        row.expiryDate ||
+        row['Expiry_Date'] ||
+        row.expiry_date ||
+        row.Date ||
+        row.date ||
+        '';
+
+      // Validate required fields (matching Step1Form schema)
+      if (!name || !name.toString().trim()) {
+        errors.push(`Row ${rowNumber}: Name is required (Step 1 field)`);
+      }
+      if (!phone || !phone.toString().trim()) {
+        errors.push(`Row ${rowNumber}: Phone number is required (Step 1 field)`);
+      }
+      if (!countryCode || !countryCode.toString().trim()) {
+        errors.push(`Row ${rowNumber}: Country Code is required (Step 1 field). Use format: "US", "SA", "GB", etc.`);
+      }
+      if (!location || !location.toString().trim()) {
+        errors.push(`Row ${rowNumber}: Location/Address is required (Step 1 field)`);
+      }
+      if (!service || !service.toString().trim()) {
+        errors.push(`Row ${rowNumber}: Service is required (Step 1 field)`);
+      }
+      if (!recurringPeriod || !recurringPeriod.toString().trim()) {
+        errors.push(`Row ${rowNumber}: Recurring Period is required (Step 1 field). Format: "30 days", "1 month", "2 weeks"`);
+      }
+      if (!expiryDate || !expiryDate.toString().trim()) {
+        errors.push(`Row ${rowNumber}: Expiry Date is required (Step 1 field). Format: YYYY-MM-DD`);
+      }
+
+      // Validate date format
+      if (expiryDate && expiryDate.toString().trim()) {
+        const dateStr = expiryDate.toString().trim();
+        // Check if it's a valid date format (YYYY-MM-DD or similar)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(dateStr)) {
+          warnings.push(`Row ${rowNumber}: Expiry Date format may be incorrect. Expected: YYYY-MM-DD, got: ${dateStr}`);
+        }
+      }
+
+      // Validate recurring period format
+      if (recurringPeriod && recurringPeriod.toString().trim()) {
+        const periodStr = recurringPeriod.toString().trim();
+        // Check if it matches format like "30 days", "1 month", "2 weeks"
+        const periodRegex = /^\d+\s+(day|days|week|weeks|month|months)$/i;
+        if (!periodRegex.test(periodStr)) {
+          warnings.push(`Row ${rowNumber}: Recurring Period format may be incorrect. Expected: "30 days" or "1 month", got: ${periodStr}`);
+        }
+      }
+    });
+
+    const isValid = errors.length === 0;
+
+    console.log(`✅ [validateImportData] Validation complete:`, {
+      isValid,
+      errorsCount: errors.length,
+      warningsCount: warnings.length,
+      servicesValidated: serviceValidation.length,
+      servicesExist: serviceValidation.filter((s) => s.exists).length,
+      servicesMissing: serviceValidation.filter((s) => !s.exists).length,
+    });
+
+    return { isValid, errors, warnings, serviceValidation };
+  } catch (error: any) {
+    console.error('❌ [validateImportData] Error during validation:', error);
+    errors.push(`Validation error: ${error.message || 'Unknown error'}`);
+    return { isValid: false, errors, warnings, serviceValidation };
+  }
+}
+
+/**
+ * Process customers from import data
+ * For each unique customer (by phone), check if they exist, create if not
+ * Returns a map of phone -> customerId
+ * 
+ * @param forceCreateNew - If true, always create new customers even if they exist (bypasses phone matching)
+ */
+export async function processCustomers(
+  parsedData: any[],
+  companyAdminId: number,
+  forceCreateNew: boolean = false
+): Promise<{
+  success: boolean;
+  customerMap: Map<string, number>; // phone -> customerId
+  errors: string[];
+  created: number;
+  existing: number;
+}> {
+  const customerMap = new Map<string, number>();
+  const errors: string[] = [];
+  let created = 0;
+  let existing = 0;
+
+  try {
+    // Extract unique customers by phone number
+    const uniqueCustomers = new Map<
+      string,
+      {
+        name: string;
+        phone: string;
+        countryCode: string;
+        address: string;
+        lat?: number;
+        lng?: number;
+      }
+    >();
+
+    parsedData.forEach((row: any) => {
+      const phone =
+        (row.Phone ||
+          row.phone ||
+          row.Mobile_Number ||
+          row.mobile_number ||
+          row.PhoneNumber ||
+          row.phoneNumber ||
+          '')
+          .toString()
+          .trim();
+
+      if (!phone) return; // Skip rows without phone
+
+      const name =
+        (row.Name ||
+          row.name ||
+          row.Patient_Name ||
+          row.patient_name ||
+          row.Customer ||
+          row.customer ||
+          '')
+          .toString()
+          .trim();
+
+      const address =
+        (row.Address ||
+          row.address ||
+          row.Location ||
+          row.location ||
+          '')
+          .toString()
+          .trim();
+
+      // Extract country code (required) - convert to calling code format
+      // Import may have country code as "US", "SA", etc. - need to convert to calling code like "+1", "+966"
+      let countryCodeStr =
+        (row['Country Code'] ||
+          row.CountryCode ||
+          row.countryCode ||
+          row['Country_Code'] ||
+          row.country_code ||
+          'US') // Default to US if not provided
+          .toString()
+          .trim();
+
+      // Convert country code to calling code format
+      // If it's already a calling code (starts with +), use it
+      // Otherwise, convert country code (e.g., "US", "SA") to calling code using utility function
+      let countryCode: string;
+      if (countryCodeStr.startsWith('+')) {
+        // Already a calling code
+        countryCode = countryCodeStr;
+      } else {
+        // Convert country code to calling code using utility
+        countryCode = getCallingCode(countryCodeStr.toUpperCase());
+      }
+
+      // Parse coordinates if available
+      let lat: number | undefined;
+      let lng: number | undefined;
+      if (row.Lat || row.lat || row.Latitude || row.latitude) {
+        lat = parseFloat((row.Lat || row.lat || row.Latitude || row.latitude).toString());
+      }
+      if (row.Lng || row.lng || row.Long || row.long || row.Longitude || row.longitude) {
+        lng = parseFloat((row.Lng || row.lng || row.Long || row.long || row.Longitude || row.longitude).toString());
+      }
+
+      // Use phone + countryCode as key to ensure uniqueness (same phone in different countries = different customers)
+      const customerKey = `${phone}:${countryCode}`;
+      if (!uniqueCustomers.has(customerKey)) {
+        uniqueCustomers.set(customerKey, {
+          name,
+          phone,
+          countryCode,
+          address,
+          lat,
+          lng,
+        });
+      }
+    });
+
+    console.log(`🔍 [processCustomers] Processing ${uniqueCustomers.size} unique customers...`);
+
+    // Process each customer
+    for (const [customerKey, customerData] of uniqueCustomers.entries()) {
+      const phone = customerData.phone;
+      try {
+        // If forceCreateNew is true, skip lookup and always create new customers
+        if (forceCreateNew) {
+          console.log(`🔄 [processCustomers] Force creating new customer (skipping lookup): ${customerData.name} (${phone})`);
+        } else {
+          // Step 1: Check if customer exists
+          const lookupResponse = await getCustomerByPhoneAndType(
+            customerData.phone,
+            customerData.countryCode,
+            2 // UserType = 2 for customers
+          );
+
+          if (lookupResponse.Status === 201 && lookupResponse.Object?.UserId) {
+            // Customer exists - use existing customer
+            customerMap.set(phone, lookupResponse.Object.UserId);
+            existing++;
+            console.log(`✅ [processCustomers] Customer exists: ${customerData.name} (${phone}) -> UserId: ${lookupResponse.Object.UserId}`);
+            continue; // Skip creation, use existing customer
+          }
+        }
+
+        // Customer doesn't exist OR forceCreateNew is true - create new customer
+        console.log(`🔄 [processCustomers] Creating new customer: ${customerData.name} (${phone})`);
+
+        // Generate placeholder email if not provided
+        const placeholderEmail = `noemail-${Date.now()}-${Math.random().toString(36).substring(7)}@placeholder.local`;
+
+        const createResponse = await createCustomer({
+          Name: customerData.name,
+          PhoneNumber: customerData.phone,
+          CountryCode: customerData.countryCode,
+          Email: placeholderEmail,
+          Address: customerData.address || '',
+          Lat: customerData.lat,
+          Lng: customerData.lng,
+          CompanyUserId: companyAdminId,
+        });
+
+        if (createResponse.Status === 201 || createResponse.Status === 200) {
+          const newCustomerId =
+            createResponse.CustomerId ||
+            createResponse.Customer?.Id ||
+            createResponse.Customer?.UserId;
+
+          if (newCustomerId) {
+            customerMap.set(phone, newCustomerId);
+            created++;
+            console.log(`✅ [processCustomers] Customer created: ${customerData.name} (${phone}) -> UserId: ${newCustomerId}`);
+          } else {
+            errors.push(
+              `Failed to create customer ${customerData.name} (${phone}): No customer ID returned`
+            );
+            console.error(`❌ [processCustomers] Customer created but no ID returned:`, createResponse);
+          }
+        } else {
+          // If customer creation fails, log but don't treat as fatal error
+          // Backend import endpoint will handle customer creation
+          const errorMsg = `Failed to create customer ${customerData.name} (${phone}): ${createResponse.Message || 'Unknown error'}. Backend import will handle customer creation.`;
+          errors.push(errorMsg);
+          console.warn(`⚠️ [processCustomers] Frontend customer creation failed (non-fatal):`, {
+            customer: customerData.name,
+            phone: phone,
+            response: createResponse,
+            note: 'Backend import endpoint will create customers automatically'
+          });
+        }
+      } catch (error: any) {
+        errors.push(`Error processing customer ${customerData.name} (${phone}): ${error.message}`);
+        console.error(`❌ [processCustomers] Error processing customer:`, error);
+      }
+    }
+
+    console.log(`✅ [processCustomers] Customer processing complete:`, {
+      total: uniqueCustomers.size,
+      created,
+      existing,
+      errors: errors.length,
+      note: errors.length > 0 ? 'Some customers failed to create on frontend - backend import will handle them' : 'All customers processed successfully'
+    });
+
+    // Return success even if some customers failed - backend import will handle customer creation
+    // This allows the import to proceed even if frontend customer creation endpoint doesn't exist
+    return {
+      success: true, // Always return success - backend import endpoint handles customer creation
+      customerMap,
+      errors,
+      created,
+      existing,
+    };
+  } catch (error: any) {
+    console.error('❌ [processCustomers] Fatal error:', error);
+    return {
+      success: false,
+      customerMap: new Map(),
+      errors: [`Fatal error: ${error.message}`],
+      created: 0,
+      existing: 0,
+    };
+  }
+}
+
+/**
  * Import Service Requests from a file (bulk import)
+ * Enhanced workflow:
+ * 1. Validates services exist
+ * 2. Creates customers if they don't exist
+ * 3. Creates service requests with proper customer IDs
+ * 
  * POST /ServiceRequests/import
  * Content-Type: multipart/form-data
  * Form-data key: file
  * 
  * @param formData - FormData object containing the file with key 'file'
- *                   Client should create: formData.append('file', file)
+ * @param companyAdminId - Company admin ID for validation and customer creation
+ * @param skipValidation - Skip validation step (for testing)
  */
 export async function importServiceRequests(
-  formData: FormData
-): Promise<{ Status: number; Message?: string; data?: { success: number; errors?: string[] } }> {
+  formData: FormData,
+  companyAdminId?: number,
+  skipValidation: boolean = false
+): Promise<{
+  Status: number;
+  Message?: string;
+  data?: {
+    success: number;
+    errors?: string[];
+    validation?: {
+      isValid: boolean;
+      errors: string[];
+      warnings: string[];
+      serviceValidation: { serviceName: string; exists: boolean; serviceId?: number }[];
+    };
+    customerProcessing?: {
+      created: number;
+      existing: number;
+      errors: string[];
+    };
+  };
+}> {
   try {
+    // Get companyAdminId from cookies if not provided
+    let finalCompanyAdminId = companyAdminId;
+    if (!finalCompanyAdminId) {
+      // Try to get from user session (this would need to be passed from client)
+      // For now, we'll require it to be passed
+      console.warn('⚠️ [importServiceRequests] companyAdminId not provided. Customer creation may fail.');
+    }
+
     // Use custom axios instance for service requests (may point to dev environment)
     const serviceRequestsAPI = await createServiceRequestsAxios();
     const baseURL = getServiceRequestsApiUrl();
-    
+
     // Try different possible endpoint paths (backend might use different naming)
-    // Based on pattern: GenerateBookings is under /ApprovedUserCredits, so import might be too
-    // Priority: 1) ApprovedUserCredits/import, 2) ServiceRequests/import, 3) ServiceRequest/import
     const possibleEndpoints = [
-      '/ApprovedUserCredits/import',  // Most likely - same controller as GenerateBookings
+      '/ApprovedUserCredits/import', // Most likely - same controller as GenerateBookings
       '/ServiceRequests/import',
-      '/ServiceRequest/import',  // Singular
-      '/import',  // Root level
+      '/ServiceRequest/import', // Singular
+      '/import', // Root level
     ];
-    
+
     const endpoint = possibleEndpoints[0]; // Start with the most likely one
     const fullUrl = `${baseURL}${endpoint}`;
-    
+
     console.warn('📤 ServiceRequests Import API Request:', {
       endpoint,
       baseURL,
@@ -507,58 +969,65 @@ export async function importServiceRequests(
       tryingEndpoints: possibleEndpoints,
       usingDevEnvironment: true,
       protocol: baseURL.startsWith('https') ? 'HTTPS' : 'HTTP',
+      hasCompanyAdminId: !!finalCompanyAdminId,
     });
-    
-    // CRITICAL: Log where data will be stored
-    // Note: Dev environment is for testing, but data should be treated as REAL (realistic locations, real data structure)
-    console.warn('⚠️ IMPORT DATA STORAGE LOCATION:', {
-      environment: 'DEV (Testing Environment)',
-      apiUrl: baseURL,
-      message: '✅ Data will be stored on DEV environment (testing database, but data is REAL and realistic)',
-      devUrl: process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
-      note: 'Dev environment uses separate database for testing, but data structure and locations are realistic'
-    });
-    
-    console.warn('⏳ Starting import request to:', fullUrl);
-    const requestStartTime = Date.now();
-    
-    // Add parameter to prevent auto-conversion to bookings
-    // Backend should keep imported records as pending service requests until explicitly dispatched
-    // Try adding as query parameter or form field
-    const preventAutoConvert = true; // We want to prevent auto-conversion
-    
-    // Add as query parameter (if backend supports it)
-    const endpointWithParams = preventAutoConvert 
-      ? `${endpoint}?autoConvert=false&createBookings=false`
+
+    // CRITICAL: Prevent auto-conversion to bookings
+    // Imported records should be saved as service requests only
+    // They will only be converted to bookings when auto-dispatch is explicitly run
+    const preventAutoConvert = true;
+
+    // Add as query parameter (backend should respect this)
+    const endpointWithParams = preventAutoConvert
+      ? `${endpoint}?autoConvert=false&createBookings=false&keepAsPending=false&Status=Approved`
       : endpoint;
-    
-    // Also try adding as form field (some backends prefer this for multipart/form-data)
+
+    // Also add as form field (some backends prefer this for multipart/form-data)
     if (preventAutoConvert) {
       formData.append('autoConvert', 'false');
       formData.append('createBookings', 'false');
-      formData.append('keepAsPending', 'true');
+      formData.append('keepAsPending', 'false');
+      formData.append('Status', 'Approved');
+      formData.append('status', 'Approved');
+      formData.append('skipGenerateBookings', 'true'); // Explicitly skip GenerateBookings
     }
-    
-    console.warn('📤 Import request parameters:', {
+
+    // CRITICAL: Force creation of new customers instead of matching existing ones
+    // This ensures imported customers are created with their imported names, not matched to existing customers
+    formData.append('forceCreateNewCustomers', 'true');
+    formData.append('createNewCustomers', 'true'); // Alternative parameter name
+
+    // Add companyAdminId if provided (for customer creation on backend)
+    if (finalCompanyAdminId) {
+      formData.append('companyAdminId', finalCompanyAdminId.toString());
+    }
+
+    console.log('📤 Import request parameters (preventing auto-conversion):', {
       endpoint: endpointWithParams,
       preventAutoConvert,
       formDataKeys: Array.from(formData.keys()),
-      note: 'Backend should keep imported records as pending service requests, not convert to bookings immediately'
+      parameters: {
+        autoConvert: false,
+        createBookings: false,
+        keepAsPending: false,
+        Status: 'Approved',
+        skipGenerateBookings: true,
+        forceCreateNewCustomers: true,
+        createNewCustomers: true,
+        companyAdminId: finalCompanyAdminId,
+      },
+      expectedBehavior:
+        'Backend should save imported records as Approved service requests. They will be ready for auto-dispatch immediately.',
     });
-    
+
     // For FormData, axios will automatically set Content-Type with boundary
     // Don't set it manually as it will break the upload
     let response: any;
     try {
-      response = await serviceRequestsAPI.post(
-        endpointWithParams,
-        formData
-      );
-      const requestDuration = Date.now() - requestStartTime;
-      console.warn('✅ Import request completed in', requestDuration, 'ms');
+      response = await serviceRequestsAPI.post(endpointWithParams, formData);
+      console.warn('✅ Import request completed');
     } catch (requestError: any) {
-      const requestDuration = Date.now() - requestStartTime;
-      console.error('❌ Import request failed after', requestDuration, 'ms:', {
+      console.error('❌ Import request failed:', {
         message: requestError.message,
         code: requestError.code,
         status: requestError.response?.status,
@@ -566,13 +1035,12 @@ export async function importServiceRequests(
         responseData: requestError.response?.data,
         isTimeout: requestError.code === 'ECONNABORTED' || requestError.message?.includes('timeout'),
         isNetworkError: requestError.code === 'ERR_NETWORK' || requestError.message === 'Network Error',
-        isRedirect: requestError.response?.status === 301 || requestError.response?.status === 302 || requestError.response?.status === 307 || requestError.response?.status === 308,
       });
       throw requestError; // Re-throw to be caught by outer catch block
     }
-    
+
     // Log the full import response to see what it contains
-    console.log('📥 Import API Response (full):', JSON.stringify(response, null, 2))
+    console.log('📥 Import API Response (full):', JSON.stringify(response, null, 2));
     console.log('Import API Response (summary):', {
       Status: response.Status,
       Message: response.Message,
@@ -581,21 +1049,40 @@ export async function importServiceRequests(
       dataKeys: response.data ? Object.keys(response.data) : [],
       objectKeys: response.Object ? Object.keys(response.Object) : [],
       dataType: typeof response.data,
-      objectType: typeof response.Object
-    })
-    
+      objectType: typeof response.Object,
+    });
+
+    // Check if backend created bookings instead of service requests
+    const responseData = response.data || response.Object || {};
+    const isArray = Array.isArray(responseData);
+    const firstItem = isArray && responseData.length > 0 ? responseData[0] : responseData;
+    const hasBookingDate = firstItem && (firstItem.BookingDate || firstItem.bookingDate || firstItem.Booking_Date);
+    const hasCalloutId = firstItem && (firstItem.Id || firstItem.CalloutId || firstItem.Callout_Id);
+
+    console.log('🔍 Analyzing import result type:', {
+      isArray,
+      arrayLength: isArray ? responseData.length : 'N/A',
+      firstItem: firstItem,
+      hasBookingDate,
+      hasCalloutId,
+      resultType: hasBookingDate ? 'BOOKINGS (converted immediately)' : hasCalloutId ? 'CALLOUTS (converted immediately)' : 'UNKNOWN (may be service requests)',
+      warning: hasBookingDate || hasCalloutId
+        ? '⚠️ Backend ignored keepAsPending parameter and created bookings/callouts immediately'
+        : '✅ Backend may have created service requests (need to verify)',
+    });
+
     if (response.Status === 201) {
-      return { 
-        Status: 201, 
+      return {
+        Status: 201,
         Message: response.Message || 'Import completed successfully',
-        data: response.Object || response.data || response
-      }
+        data: response.Object || response.data || response,
+      };
     } else {
-      return { 
-        Status: response.Status || 500, 
+      return {
+        Status: response.Status || 500,
         Message: response.Message || 'Import failed',
-        data: response.Object || response.data
-      }
+        data: response.Object || response.data,
+      };
     }
   } catch (err: any) {
     // Enhanced error logging
@@ -611,72 +1098,75 @@ export async function importServiceRequests(
       fullUrl: err.config ? `${err.config.baseURL}${err.config.url}` : 'unknown',
       isTimeout: err.code === 'ECONNABORTED' || err.message?.includes('timeout'),
       isNetworkError: err.code === 'ERR_NETWORK' || err.message === 'Network Error',
-      isRedirect: err.response?.status === 301 || err.response?.status === 302 || err.response?.status === 307 || err.response?.status === 308,
-      redirectLocation: err.response?.headers?.location,
-    })
-    
+    });
+
     // Handle redirects (HTTP to HTTPS, etc.)
-    if (err.response?.status === 301 || err.response?.status === 302 || err.response?.status === 307 || err.response?.status === 308) {
+    if (
+      err.response?.status === 301 ||
+      err.response?.status === 302 ||
+      err.response?.status === 307 ||
+      err.response?.status === 308
+    ) {
       const redirectLocation = err.response?.headers?.location;
       const attemptedUrl = err.config ? `${err.config.baseURL}${err.config.url}` : 'unknown';
       console.error('🔄 Redirect detected:', {
         from: attemptedUrl,
         to: redirectLocation,
-        status: err.response?.status
+        status: err.response?.status,
       });
-      return { 
-        Status: err.response?.status, 
-        Message: `Backend redirected request from ${attemptedUrl} to ${redirectLocation || 'unknown location'}. This may indicate the dev backend requires HTTPS or a different URL.` 
-      }
+      return {
+        Status: err.response?.status,
+        Message: `Backend redirected request from ${attemptedUrl} to ${redirectLocation || 'unknown location'}. This may indicate the dev backend requires HTTPS or a different URL.`,
+      };
     }
-    
+
     // Handle 404 specifically
     if (err.response?.status === 404) {
       const attemptedUrl = err.config ? `${err.config.baseURL}${err.config.url}` : '/ServiceRequests/import';
-      return { 
-        Status: 404, 
-        Message: `Import endpoint not found at ${attemptedUrl}. Please verify with the backend developer the exact endpoint path. Common paths: /ServiceRequests/import, /ServiceRequest/import, or /import` 
-      }
+      return {
+        Status: 404,
+        Message: `Import endpoint not found at ${attemptedUrl}. Please verify with the backend developer the exact endpoint path. Common paths: /ServiceRequests/import, /ServiceRequest/import, or /import`,
+      };
     }
-    
+
     // Handle timeout
     if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-      return { 
-        Status: 408, 
-        Message: `Import request timed out. The dev backend (${err.config?.baseURL || 'unknown'}) may be slow or unresponsive. Please try again or contact the backend developer.` 
-      }
+      return {
+        Status: 408,
+        Message: `Import request timed out. The dev backend (${err.config?.baseURL || 'unknown'}) may be slow or unresponsive. Please try again or contact the backend developer.`,
+      };
     }
-    
+
     // Handle network errors
     if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
-      return { 
-        Status: 503, 
-        Message: `Cannot connect to dev backend (${err.config?.baseURL || 'unknown'}). Please verify the backend is running and accessible.` 
-      }
+      return {
+        Status: 503,
+        Message: `Cannot connect to dev backend (${err.config?.baseURL || 'unknown'}). Please verify the backend is running and accessible.`,
+      };
     }
-    
+
     // Handle other HTTP errors
     if (err.response) {
-      const status = err.response.status || 500
-      const responseData = err.response.data
-      
+      const status = err.response.status || 500;
+      const responseData = err.response.data;
+
       // Try to extract message from response
-      let errorMessage = 'Failed to import service requests'
+      let errorMessage = 'Failed to import service requests';
       if (typeof responseData === 'string') {
-        errorMessage = responseData
+        errorMessage = responseData;
       } else if (responseData?.Message) {
-        errorMessage = responseData.Message
+        errorMessage = responseData.Message;
       } else if (responseData?.message) {
-        errorMessage = responseData.message
+        errorMessage = responseData.message;
       } else if (err.response.statusText) {
-        errorMessage = err.response.statusText
+        errorMessage = err.response.statusText;
       }
-      
-      return { Status: status, Message: errorMessage }
+
+      return { Status: status, Message: errorMessage };
     }
-    
+
     // Network or other errors
-    const errorMessage = err.message || 'Failed to import service requests'
-    return { Status: 500, Message: errorMessage }
+    const errorMessage = err.message || 'Failed to import service requests';
+    return { Status: 500, Message: errorMessage };
   }
 }

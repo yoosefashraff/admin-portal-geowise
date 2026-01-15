@@ -1,7 +1,7 @@
 // API Base URL - matches backend configuration
 // Uses same environment variables as main app (VITE_ prefix for Vite)
 // In development, use Vite proxy to avoid CORS issues
-// In production, use direct API URL
+// In production, use direct API URL (always HTTPS)
 function getApiBaseUrl(): string {
   // Check for DEV environment variable (same as main app)
   const devUrl = import.meta.env.VITE_DEV_API_URL || import.meta.env.VITE_SERVICE_REQUESTS_API_URL;
@@ -10,10 +10,20 @@ function getApiBaseUrl(): string {
     // Development: Use Vite proxy (which proxies to DEV backend)
     return '/api';
   } else {
-    // Production: Use direct URL
-    // If DEV URL is set, use it (for testing), otherwise use production
+    // Production: Use direct URL (always HTTPS)
+    // If DEV URL is set, use it (for testing), but ensure it's HTTPS
     if (devUrl) {
-      return devUrl.replace(/^["']|["']$/g, '').trim();
+      let url = devUrl.replace(/^["']|["']$/g, '').trim();
+      // Ensure HTTPS in production (fix mixed content errors)
+      if (url.startsWith('http://')) {
+        url = url.replace('http://', 'https://');
+        console.warn('⚠️ [Auto-Dispatch] Converted HTTP to HTTPS for production:', url);
+      }
+      // If no protocol, assume HTTPS
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = `https://${url}`;
+      }
+      return url;
     }
     return 'https://gw5cn.geowise.ai';
   }
@@ -23,9 +33,16 @@ const API_BASE_URL = getApiBaseUrl();
 
 /**
  * Get cookies from browser and format as Cookie header value
+ * Note: For cross-origin requests, browsers may block manually set Cookie headers.
+ * We rely on credentials: 'include' for automatic cookie handling.
  */
 function getCookieHeader(): string {
-  return document.cookie
+  // Return cookies for logging/debugging, but browsers handle cookies via credentials: 'include'
+  const cookies = document.cookie;
+  if (!cookies) {
+    console.warn('⚠️ [Auto-Dispatch] No cookies found in document.cookie. Make sure you are logged in.');
+  }
+  return cookies;
 }
 
 export interface ApprovedUserCredit {
@@ -80,6 +97,10 @@ export async function createApprovedUserCredit(
 
   if (!response.ok) {
     const errorText = await response.text()
+    if (response.status === 401) {
+      console.error('❌ [Auto-Dispatch] Authentication failed (401) when creating credit');
+      throw new Error('Authentication failed. Your session may have expired. Please log out and log back in, then try again.');
+    }
     throw new Error(`Failed to create credit: ${response.status} ${errorText}`)
   }
 
@@ -104,6 +125,10 @@ export async function updateApprovedUserCredit(
 
   if (!response.ok) {
     const errorText = await response.text()
+    if (response.status === 401) {
+      console.error('❌ [Auto-Dispatch] Authentication failed (401) when updating credit');
+      throw new Error('Authentication failed. Your session may have expired. Please log out and log back in, then try again.');
+    }
     throw new Error(`Failed to update credit: ${response.status} ${errorText}`)
   }
 
@@ -126,6 +151,10 @@ export async function getApprovedUserCreditsByUserId(): Promise<ApprovedUserCred
 
     if (!response.ok) {
       const errorText = await response.text()
+      if (response.status === 401) {
+        console.error('❌ [Auto-Dispatch] Authentication failed (401) when getting credits by user ID');
+        throw new Error('Authentication failed. Your session may have expired. Please log out and log back in, then try again.');
+      }
       throw new Error(`Failed to get credits: ${response.status} ${errorText}`)
     }
 
@@ -156,6 +185,10 @@ export async function getApprovedUserCreditById(id: number): Promise<ApprovedUse
 
   if (!response.ok) {
     const errorText = await response.text()
+    if (response.status === 401) {
+      console.error('❌ [Auto-Dispatch] Authentication failed (401) when getting credit by ID');
+      throw new Error('Authentication failed. Your session may have expired. Please log out and log back in, then try again.');
+    }
     throw new Error(`Failed to get credit: ${response.status} ${errorText}`)
   }
 
@@ -204,6 +237,22 @@ export async function listApprovedUserCredits(params: {
 
   if (!response.ok) {
     const errorText = await response.text()
+    if (response.status === 401) {
+      console.error('❌ [Auto-Dispatch] Authentication failed (401). Possible causes:', {
+        status: 401,
+        url,
+        apiBaseUrl: API_BASE_URL,
+        hasCookies: !!document.cookie,
+        cookieLength: document.cookie.length,
+        possibleCauses: [
+          'Session expired - user needs to log in again',
+          'Cookies not being sent due to CORS/SameSite policy',
+          'Backend authentication service unavailable',
+          'API URL mismatch (check HTTPS vs HTTP)'
+        ]
+      });
+      throw new Error('Authentication failed. Your session may have expired. Please log out and log back in, then try again.');
+    }
     throw new Error(`Failed to list credits: ${response.status} ${errorText}`)
   }
 
@@ -258,6 +307,10 @@ export async function deleteApprovedUserCredit(id: number): Promise<void> {
 
   if (!response.ok) {
     const errorText = await response.text()
+    if (response.status === 401) {
+      console.error('❌ [Auto-Dispatch] Authentication failed (401) when deleting credit');
+      throw new Error('Authentication failed. Your session may have expired. Please log out and log back in, then try again.');
+    }
     throw new Error(`Failed to delete credit: ${response.status} ${errorText}`)
   }
 }
