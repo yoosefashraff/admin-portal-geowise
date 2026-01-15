@@ -14,15 +14,15 @@ function getApiBaseUrl(): string {
   // Backward compatibility with old variable name
   const legacyDevUrl = process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
   const prodUrl = process.env.NEXT_PUBLIC_API_URL;
-  
+
   // Remove quotes if present (common mistake in .env files)
   const cleanDevUrl = devUrl ? devUrl.replace(/^["']|["']$/g, '').trim() : undefined;
   const cleanLegacyDevUrl = legacyDevUrl ? legacyDevUrl.replace(/^["']|["']$/g, '').trim() : undefined;
   const cleanProdUrl = prodUrl ? prodUrl.replace(/^["']|["']$/g, '').trim() : undefined;
-  
+
   // Use dev environment if set (new variable takes precedence over legacy)
   const finalDevUrl = cleanDevUrl || cleanLegacyDevUrl;
-  
+
   // CRITICAL: Require dev environment - do NOT fall back to production
   if (!finalDevUrl) {
     const errorMsg = 'Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.';
@@ -37,21 +37,27 @@ function getApiBaseUrl(): string {
     });
     throw new Error(errorMsg);
   }
-  
+
   // Dev environment is configured - use it
   // Remove trailing slash (axios handles it correctly with paths starting with /)
   let baseUrl = finalDevUrl.replace(/\/+$/, '');
-  
+
+  // CRITICAL: Upgrade to HTTPS for the known dev domain which supports HTTPS.
+  // This avoids Mixed Content issues when the client receives these URLs
+  if (baseUrl.startsWith('http://gw5cndev.geowise.ai')) {
+    baseUrl = baseUrl.replace('http://', 'https://');
+  }
+
   if (typeof window === 'undefined') {
     console.warn('✅ Using DEV API Base URL:', baseUrl);
     console.warn('📋 Dev Environment Configuration:', {
-      originalDevVar: cleanDevUrl || cleanLegacyDevUrl,
-      resolvedBaseUrl: baseUrl,
+      requested: finalDevUrl,
+      resolved: baseUrl,
       environment: 'DEV',
-      note: cleanLegacyDevUrl ? 'Using legacy NEXT_PUBLIC_SERVICE_REQUESTS_API_URL' : 'Using NEXT_PUBLIC_DEV_API_URL'
+      protocol: baseUrl.startsWith('https') ? 'HTTPS ✅' : 'HTTP ⚠️'
     });
   }
-  
+
   return baseUrl;
 }
 
@@ -69,16 +75,16 @@ class ServerTokenManager {
     try {
       const cookieStore = await cookies();
       const cookie = cookieStore.get(this.COOKIE_NAME);
-      
+
       // Log all cookies for debugging
       const allCookies = cookieStore.getAll();
       console.log('ServerTokenManager: All cookies:', allCookies.map(c => ({ name: c.name, hasValue: !!c.value, valueLength: c.value?.length || 0 })));
-      
+
       if (!cookie?.value) {
         console.warn('ServerTokenManager: Cookie not found. Available cookies:', allCookies.map(c => c.name));
         return null;
       }
-      
+
       console.log('ServerTokenManager: Cookie found, length:', cookie.value.length);
       return cookie.value;
     } catch (error) {
@@ -104,10 +110,10 @@ class ServerAxiosConfig {
     // For dev environment, handle SSL certificate verification issues
     // The dev backend may use a self-signed certificate or certificate not in Node.js CA store
     const isDevEnvironment = this.baseURL.includes('gw5cndev') || this.baseURL.includes('localhost');
-    const httpsAgent = isDevEnvironment 
+    const httpsAgent = isDevEnvironment
       ? new https.Agent({
-          rejectUnauthorized: false // Only for dev - allows self-signed certs
-        })
+        rejectUnauthorized: false // Only for dev - allows self-signed certs
+      })
       : undefined;
 
     this.instance = axios.create({
@@ -194,7 +200,7 @@ class ServerAxiosConfig {
       (error) => {
         // Check if it's a timeout error
         const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
-        
+
         // Log error details
         console.error('❌ API Request failed:', {
           url: error.config?.url,
@@ -205,13 +211,13 @@ class ServerAxiosConfig {
           isTimeout: isTimeout,
           baseURL: this.baseURL
         });
-        
+
         // Enhance timeout error message
         if (isTimeout) {
           console.error('⏱️ Request timed out after 60 seconds. The backend API may be slow or unresponsive.');
           error.message = 'Request timeout: The backend API took too long to respond (60 seconds). Please try again or contact support if the issue persists.';
         }
-        
+
         // Check if error is a redirect (3xx status)
         if (error.response && error.response.status >= 300 && error.response.status < 400) {
           console.warn('⚠️ Server redirected (likely to login page):', {

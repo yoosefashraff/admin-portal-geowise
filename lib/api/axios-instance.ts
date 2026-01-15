@@ -7,15 +7,15 @@ function getClientApiUrl(): string {
   // Backward compatibility with old variable name
   const legacyDevUrl = process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
   const prodUrl = process.env.NEXT_PUBLIC_API_URL;
-  
+
   // Remove quotes if present (common mistake in .env files)
   const cleanDevUrl = devUrl ? devUrl.replace(/^["']|["']$/g, '').trim() : undefined;
   const cleanLegacyDevUrl = legacyDevUrl ? legacyDevUrl.replace(/^["']|["']$/g, '').trim() : undefined;
   const cleanProdUrl = prodUrl ? prodUrl.replace(/^["']|["']$/g, '').trim() : undefined;
-  
+
   // Use dev environment if set (new variable takes precedence over legacy)
   const finalDevUrl = cleanDevUrl || cleanLegacyDevUrl;
-  
+
   // CRITICAL: Require dev environment - do NOT fall back to production
   if (!finalDevUrl) {
     const errorMsg = 'Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.';
@@ -32,13 +32,28 @@ function getClientApiUrl(): string {
     // On server, throw immediately
     throw new Error(errorMsg);
   }
-  
+
   // Dev environment is configured - use it
-  if (typeof window !== 'undefined') {
-    console.warn('🔍 Client-side API using DEV environment:', finalDevUrl);
+  let baseUrl = finalDevUrl.replace(/\/+$/, '');
+
+  // CRITICAL: Upgrade to HTTPS if running on a secure domain (like Netlify) 
+  // or if using the known dev domain which supports HTTPS.
+  if (baseUrl.startsWith('http://gw5cndev.geowise.ai')) {
+    baseUrl = baseUrl.replace('http://', 'https://');
+  } else if (typeof window !== 'undefined' && window.location.protocol === 'https:' && baseUrl.startsWith('http://')) {
+    // If we're on an HTTPS page, we MUST use HTTPS for the API to avoid Mixed Content errors
+    baseUrl = baseUrl.replace('http://', 'https://');
   }
-  
-  return finalDevUrl.replace(/\/+$/, ''); // Remove trailing slash
+
+  if (typeof window !== 'undefined') {
+    console.warn('🔍 Client-side API using environment:', {
+      requested: finalDevUrl,
+      resolved: baseUrl,
+      protocol: baseUrl.startsWith('https') ? 'HTTPS ✅' : 'HTTP ⚠️'
+    });
+  }
+
+  return baseUrl;
 }
 
 const API_BASE_URL = getClientApiUrl();

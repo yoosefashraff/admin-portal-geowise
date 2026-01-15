@@ -46,14 +46,19 @@ function getServiceRequestsApiUrl(): string {
   }
 
   // Normalize URL - remove trailing slash (axios will add it when needed)
-  // Paths in axios calls start with /, so baseURL should not have trailing slash
-  const baseUrl = finalDevUrl.replace(/\/+$/, '');
+  let baseUrl = finalDevUrl.replace(/\/+$/, '');
+
+  // CRITICAL: Upgrade to HTTPS for the known dev domain which supports HTTPS.
+  // This avoids Mixed Content issues when the client receives these URLs
+  if (baseUrl.startsWith('http://gw5cndev.geowise.ai')) {
+    baseUrl = baseUrl.replace('http://', 'https://');
+  }
 
   // Warn if dev environment uses HTTP (should use HTTPS)
-  if (typeof window === 'undefined' && finalDevUrl.startsWith('http://')) {
+  if (typeof window === 'undefined' && baseUrl.startsWith('http://')) {
     console.warn('⚠️ WARNING: Dev environment URL uses HTTP instead of HTTPS:', {
-      currentUrl: finalDevUrl,
-      recommended: finalDevUrl.replace('http://', 'https://'),
+      currentUrl: baseUrl,
+      recommended: baseUrl.replace('http://', 'https://'),
       reason: 'HTTPS is required to avoid mixed content security issues when frontend is served over HTTPS'
     });
   }
@@ -62,8 +67,8 @@ function getServiceRequestsApiUrl(): string {
   if (typeof window === 'undefined') {
     console.warn('🔧 Service Requests API URL:', {
       usingDev: true,
-      devUrl: finalDevUrl,
-      resolvedUrl: baseUrl,
+      requested: finalDevUrl,
+      resolved: baseUrl,
       protocol: baseUrl.startsWith('https') ? 'HTTPS ✅' : 'HTTP ⚠️',
       note: cleanLegacyDevUrl ? 'Using legacy NEXT_PUBLIC_SERVICE_REQUESTS_API_URL' : 'Using NEXT_PUBLIC_DEV_API_URL'
     });
@@ -979,14 +984,15 @@ export async function importServiceRequests(
 
     // Add as query parameter (backend should respect this)
     const endpointWithParams = preventAutoConvert
-      ? `${endpoint}?autoConvert=false&createBookings=false&keepAsPending=false&Status=Approved`
+      ? `${endpoint}?autoConvert=false&createBookings=false&createAppointment=false&keepAsPending=true&Status=Approved`
       : endpoint;
 
     // Also add as form field (some backends prefer this for multipart/form-data)
     if (preventAutoConvert) {
       formData.append('autoConvert', 'false');
       formData.append('createBookings', 'false');
-      formData.append('keepAsPending', 'false');
+      formData.append('createAppointment', 'false');
+      formData.append('keepAsPending', 'true');
       formData.append('Status', 'Approved');
       formData.append('status', 'Approved');
       formData.append('skipGenerateBookings', 'true'); // Explicitly skip GenerateBookings
