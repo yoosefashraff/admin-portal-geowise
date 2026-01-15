@@ -1,0 +1,21 @@
+[build]
+  # Build command for Next.js
+  command = "npm run build"
+  # Next.js plugin handles publish directory automatically
+  # If not using plugin, publish = ".next"
+
+# Branch-specific configuration
+[context.dev]
+  # Build from dev branch
+  branch = "dev"
+  command = "npm run build"
+
+[context.production]
+  # Production branch (usually main/master)
+  branch = "main"
+  command = "npm run build"
+
+# Environment variables can be set per context in Netlify dashboard
+# Or uncomment below to set in this file:
+# [context.dev.environment]
+#   NEXT_PUBLIC_DEV_API_URL = "https://gw5cndev.geowise.ai"
