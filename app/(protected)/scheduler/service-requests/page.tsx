@@ -1363,109 +1363,102 @@ export default function ServiceRequestsPage() {
 
       const startTime = Date.now()
 
-      // Show a loading message for long-running operations
-      const loadingToast = toast.loading('Processing auto-dispatch... This may take up to 10 minutes.', {
-        description: `Processing ${uniqueCreditIds.length} credit ID(s) for ${selectedServices.length} service request(s)...`
-      })
+      // Process in batches to avoid timeouts on Netlify (max 26s per request)
+      const BATCH_SIZE = 5;
+      const totalBatches = Math.ceil(uniqueCreditIds.length / BATCH_SIZE);
 
-      const response = await generateBookings(uniqueCreditIds)
-      const duration = Date.now() - startTime
-      console.log(`GenerateBookings API call completed in ${duration}ms (${(duration / 1000).toFixed(1)}s)`, response)
+      let totalSuccessCount = 0;
+      let allErrors: string[] = [];
+      let lastStatus = 200;
+      let lastMessage = '';
+      let currentBatch = 0;
+      let aggregatedData: any = { bookingsCreated: 0, success: 0 };
 
-      // Dismiss loading toast
-      toast.dismiss(loadingToast)
+      // Show loading toast with progress
+      const loadingToast = toast.loading(`Starting auto-dispatch... (0/${uniqueCreditIds.length})`, {
+        description: `Processing batch 1 of ${totalBatches}...`
+      });
 
-      // Store selected service requests and API response for progress page
-      sessionStorage.setItem('autoDispatchServiceIds', JSON.stringify(selectedServices.map((s) => s.id)))
-      sessionStorage.setItem('autoDispatchResponse', JSON.stringify(response))
-      sessionStorage.setItem('autoDispatchServices', JSON.stringify(selectedServices))
+      for (let i = 0; i < uniqueCreditIds.length; i += BATCH_SIZE) {
+        if (!isRunningAutoDispatch) break; // Allow cancel
 
-      // Handle 401 authentication errors specifically
-      if (response.Status === 401) {
-        console.error('❌ Auto Dispatch failed: Authentication error', {
-          status: response.Status,
-          message: response.Message,
-          responseData: response.data
-        })
+        currentBatch++;
+        const batchIds = uniqueCreditIds.slice(i, i + BATCH_SIZE);
 
-        toast.error('Authentication Failed', {
-          description: 'Your session may have expired. Please log out and log back in, then try again.',
-          duration: 8000,
-          action: {
-            label: 'Go to Login',
-            onClick: () => router.push('/login')
+        // Update UI
+        toast.loading(`Processing batch ${currentBatch}/${totalBatches}...`, {
+          id: loadingToast,
+          description: `Processing items ${i + 1} to ${Math.min(i + BATCH_SIZE, uniqueCreditIds.length)}`
+        });
+
+        console.log(`🚀 Dispatching batch ${currentBatch}/${totalBatches}:`, batchIds);
+
+        try {
+          // Call Server Action for this batch
+          const response = await generateBookings(batchIds);
+
+          if (response.Status === 201) {
+            const count = response.data?.bookingsCreated || response.data?.success || 0;
+            totalSuccessCount += count;
+
+            // Accumulate
+            aggregatedData.bookingsCreated = (aggregatedData.bookingsCreated || 0) + count;
+            aggregatedData.success = (aggregatedData.success || 0) + count;
+
+            console.log(`✅ Batch ${currentBatch} OK: +${count} bookings`);
+          } else {
+            console.error(`❌ Batch ${currentBatch} Failed:`, response.Message);
+            allErrors.push(`Batch ${currentBatch}: ${response.Message}`);
+            lastStatus = response.Status;
+
+            // Critical auth failure - stop immediately
+            if (response.Status === 401) {
+              toast.error('Session Expired', { id: loadingToast });
+              setIsRunningAutoDispatch(false);
+              return;
+            }
           }
-        })
-        setIsRunningAutoDispatch(false)
-        return
+        } catch (err: any) {
+          console.error(`❌ Batch ${currentBatch} Exception:`, err);
+          allErrors.push(`Batch ${currentBatch} error: ${err.message}`);
+        }
       }
 
-      if (response.Status === 201) {
-        const successCount = response.data?.bookingsCreated || response.data?.success || 0
-        toast.success(`Auto Dispatch started. ${successCount} booking${successCount !== 1 ? 's' : ''} will be created.`)
+      const duration = Date.now() - startTime;
+      toast.dismiss(loadingToast);
 
-        // Navigate to progress page
-        router.push('/scheduler/auto-dispatch/progress')
+      console.log(`🏁 Auto-Dispatch Complete. Duration: ${duration}ms, Success: ${totalSuccessCount}, Errors: ${allErrors.length}`);
+
+      // SUCCESS CASE
+      if (totalSuccessCount > 0) {
+        const message = `Auto Dispatch Completed. Created ${totalSuccessCount} booking(s).`;
+
+        if (allErrors.length > 0) {
+          toast.warning(message, { description: `${allErrors.length} batches failed. Check console.` });
+        } else {
+          toast.success(message);
+        }
+
+        // Save state for progress page
+        const finalResponse = {
+          Status: 201,
+          Message: 'Batch processing completed',
+          data: aggregatedData
+        };
+        sessionStorage.setItem('autoDispatchServiceIds', JSON.stringify(selectedServices.map((s) => s.id)));
+        sessionStorage.setItem('autoDispatchResponse', JSON.stringify(finalResponse));
+        sessionStorage.setItem('autoDispatchServices', JSON.stringify(selectedServices));
+
+        router.push('/scheduler/auto-dispatch/progress');
+
       } else {
-        const errorMessage = response.Message || 'Failed to start Auto Dispatch'
-
-        // Provide more helpful error messages for common issues
-        let userFriendlyMessage = errorMessage
-        if (errorMessage.includes('No ApprovedUserCredits found') || errorMessage.includes('no remaining credits')) {
-          userFriendlyMessage = `No valid credits found for the selected services. The credits may not exist in the ${process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL ? 'DEV' : 'PRODUCTION'} database, or they may have no remaining balance.`
-        } else if (errorMessage.includes('timeout')) {
-          // Check if timeout occurred with single credit ID
-          const isSingleCreditTimeout = uniqueCreditIds.length === 1;
-
-          if (isSingleCreditTimeout) {
-            userFriendlyMessage = `Backend timeout: Processing 1 credit ID took longer than 10 minutes. This indicates a backend performance issue. Please contact the backend team or check backend logs.`;
-
-            toast.error('Backend Performance Issue', {
-              description: `The backend is taking too long to process a single credit ID. This is likely a backend issue, not a frontend problem. Please check backend logs or contact support.`,
-              duration: 15000
-            });
-          } else {
-            userFriendlyMessage = 'Request timed out after 10 minutes. The server may still be processing your request in the background. Please check backend logs or try again with fewer credit IDs.'
-
-            // Provide additional guidance for timeout errors
-            toast.warning('Long-running operation detected', {
-              description: `Processing ${uniqueCreditIds.length} credit ID(s) may take longer than expected. Consider processing in smaller batches.`,
-              duration: 10000
-            });
-          }
-        } else if (errorMessage.includes('Cannot connect') || errorMessage.includes('Network Error')) {
-          userFriendlyMessage = `Cannot connect to backend. Please verify the ${process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL ? 'DEV' : 'PRODUCTION'} backend is running.`
-        } else if (errorMessage.includes('Authentication failed') || errorMessage.includes('session')) {
-          userFriendlyMessage = 'Your session has expired. Please log out and log back in, then try again.'
-        }
-
-        toast.error(userFriendlyMessage, {
-          description: errorMessage !== userFriendlyMessage ? errorMessage : undefined,
-          duration: 8000
-        })
-
-        if (response.data?.ErrorLogs && response.data.ErrorLogs.length > 0) {
-          console.error('Error logs:', response.data.ErrorLogs)
-        }
-
-        // Log detailed error for debugging
-        console.error('Auto Dispatch error details:', {
-          status: response.Status,
-          message: response.Message,
-          creditIds: uniqueCreditIds,
-          selectedServices: selectedServices.map(s => ({
-            name: s.name,
-            creditId: s.approvedUserCreditId,
-            userId: s.userId,
-            serviceId: s.serviceId,
-            remainingCredits: s.credits.remaining
-          })),
-          responseData: response.data
-        })
+        // FAILURE CASE (0 successes)
+        const failMsg = allErrors.length > 0 ? allErrors[0] : 'Auto Dispatch failed to create any bookings';
+        toast.error('Auto Dispatch Failed', { description: failMsg });
       }
     } catch (error) {
       console.error('Failed to run Auto Dispatch:', error)
-      toast.error('Failed to run Auto Dispatch. Please try again.')
+      toast.error('System Error: Failed to run Auto Dispatch')
     } finally {
       setIsRunningAutoDispatch(false)
     }
