@@ -21,7 +21,8 @@
 #   NEXT_PUBLIC_DEV_API_URL = "https://gw5cndev.geowise.ai"
 
 [functions]
-  # Increase function duration to 26s (max for synchronous requests on Netlify)
-  # Default is 10s, which is often too short for auto-dispatch
-  duration = 26
   node_bundler = "esbuild"
+
+[functions."*"]
+  # Increase function duration to 26s (max for synchronous requests on Netlify)
+  duration = 26
