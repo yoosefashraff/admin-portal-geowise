@@ -841,7 +841,7 @@ export async function processCustomers(
           const newCustomerId =
             createResponse.CustomerId ||
             createResponse.Customer?.Id ||
-            createResponse.Customer?.UserId;
+            (createResponse.Customer as any)?.UserId;
 
           if (newCustomerId) {
             customerMap.set(phone, newCustomerId);
