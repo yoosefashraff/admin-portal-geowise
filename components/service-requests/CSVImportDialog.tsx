@@ -250,14 +250,10 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
           Status: response.Status,
           Message: response.Message,
           data: response.data,
-          hasObject: !!response.Object,
-          objectType: typeof response.Object,
-          objectIsArray: Array.isArray(response.Object),
-          objectLength: Array.isArray(response.Object) ? response.Object.length : 'N/A',
         });
 
         // Check if backend created bookings instead of service requests
-        const responseData = response.data || response.Object || {};
+        const responseData = response.data || {};
         const hasBookings = Array.isArray(responseData) && responseData.length > 0 && responseData[0]?.BookingDate;
         const hasServiceRequests = Array.isArray(responseData) && responseData.length > 0 && !responseData[0]?.BookingDate;
 
@@ -322,23 +318,20 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
         }
 
         // Show errors if any
-        if (response.data?.ErrorLogs && response.data.ErrorLogs.length > 0) {
-          const errorCount = response.data.ErrorLogs.length;
-          const errorMessages = response.data.ErrorLogs.slice(0, 3).join('; ');
+        if (response.data?.errors && response.data.errors.length > 0) {
+          const errorCount = response.data.errors.length;
+          const errorMessages = response.data.errors.slice(0, 3).join('; ');
           toast.error(
             `Import failed: ${errorCount} error(s). ${errorMessages}${errorCount > 3 ? '...' : ''}`,
             { duration: 10000 }
           );
-          console.error('Import errors:', response.data.ErrorLogs);
-        } else if (response.data?.errors && response.data.errors.length > 0) {
-          toast.warning(`${response.data.errors.length} error(s) occurred during import`);
-          console.warn('Import errors:', response.data.errors);
+          console.error('Import errors:', response.data.errors);
         }
 
-        // Show specific error if import failed
-        if (successCount === 0 && response.data?.ErrorCount > 0) {
+        // Show specific error if import failed (no success count)
+        if (successCount === 0 && response.data?.errors?.length > 0) {
           toast.error(
-            `Import failed: ${response.data.ErrorCount} error(s). Check console for details.`,
+            `Import failed: ${response.data.errors.length} error(s). Check console for details.`,
             { duration: 8000 }
           );
         }
