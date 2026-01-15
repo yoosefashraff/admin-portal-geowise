@@ -961,139 +961,85 @@ export async function importServiceRequests(
     const baseURL = getServiceRequestsApiUrl();
 
     // Try different possible endpoint paths (backend might use different naming)
-    const possibleEndpoints = [
-      '/ApprovedUserCredits/import', // Most likely - same controller as GenerateBookings
-      '/ServiceRequests/import',
-      '/ServiceRequest/import', // Singular
-      '/import', // Root level
+    // We prioritize /ServiceRequests/import as this semantic implies creating requests WITHOUT auto-booking
+    // /ApprovedUserCredits/import often implies "Ready for Booking" which triggers auto-conversion
+    const endpointsToTry = [
+      '/ServiceRequests/import', // Priority 1: Semantic match for "Import Requests"
+      '/ApprovedUserCredits/import', // Priority 2: Fallback
+      '/ServiceRequest/import',
+      '/import',
     ];
 
-    const endpoint = possibleEndpoints[0]; // Start with the most likely one
-    const fullUrl = `${baseURL}${endpoint}`;
-
-    console.warn('📤 ServiceRequests Import API Request:', {
-      endpoint,
-      baseURL,
-      fullUrl,
-      tryingEndpoints: possibleEndpoints,
-      usingDevEnvironment: true,
-      protocol: baseURL.startsWith('https') ? 'HTTPS' : 'HTTP',
-      hasCompanyAdminId: !!finalCompanyAdminId,
-    });
-
-    // CRITICAL: Prevent auto-conversion to bookings
-    // Imported records should be saved as service requests only
-    // They will only be converted to bookings when auto-dispatch is explicitly run
-    const preventAutoConvert = true;
-
-    // Add as query parameter (backend should respect this)
-    const endpointWithParams = preventAutoConvert
-      ? `${endpoint}?autoConvert=false&createBookings=false&createAppointment=false&keepAsPending=true&Status=Approved`
-      : endpoint;
-
-    // Also add as form field (some backends prefer this for multipart/form-data)
-    if (preventAutoConvert) {
-      formData.append('autoConvert', 'false');
-      formData.append('createBookings', 'false');
-      formData.append('createAppointment', 'false');
-      formData.append('keepAsPending', 'true');
-      formData.append('Status', 'Approved');
-      formData.append('status', 'Approved');
-      formData.append('skipGenerateBookings', 'true'); // Explicitly skip GenerateBookings
-    }
+    // CRITICAL: Prevent auto-conversion to bookings. 
+    // We append these to FormData to ensure the backend receives them regardless of query param parsing.
+    formData.append('autoConvert', 'false');
+    formData.append('createBookings', 'false');
+    formData.append('createAppointment', 'false');
+    formData.append('keepAsPending', 'true');
+    formData.append('Status', 'Approved');
+    formData.append('status', 'Approved');
+    formData.append('skipGenerateBookings', 'true');
 
     // CRITICAL: Force creation of new customers instead of matching existing ones
-    // This ensures imported customers are created with their imported names, not matched to existing customers
     formData.append('forceCreateNewCustomers', 'true');
-    formData.append('createNewCustomers', 'true'); // Alternative parameter name
+    formData.append('createNewCustomers', 'true');
 
-    // Add companyAdminId if provided (for customer creation on backend)
+    // Add companyAdminId if provided
     if (finalCompanyAdminId) {
       formData.append('companyAdminId', finalCompanyAdminId.toString());
     }
 
-    console.log('📤 Import request parameters (preventing auto-conversion):', {
-      endpoint: endpointWithParams,
-      preventAutoConvert,
-      formDataKeys: Array.from(formData.keys()),
-      parameters: {
-        autoConvert: false,
-        createBookings: false,
-        keepAsPending: false,
-        Status: 'Approved',
-        skipGenerateBookings: true,
-        forceCreateNewCustomers: true,
-        createNewCustomers: true,
-        companyAdminId: finalCompanyAdminId,
-      },
-      expectedBehavior:
-        'Backend should save imported records as Approved service requests. They will be ready for auto-dispatch immediately.',
-    });
+    let apiResponse = null;
+    let successEndpoint = '';
 
-    // For FormData, axios will automatically set Content-Type with boundary
-    // Don't set it manually as it will break the upload
-    let response: any;
-    try {
-      response = await serviceRequestsAPI.post(endpointWithParams, formData);
-      console.warn('✅ Import request completed');
-    } catch (requestError: any) {
-      console.error('❌ Import request failed:', {
-        message: requestError.message,
-        code: requestError.code,
-        status: requestError.response?.status,
-        statusText: requestError.response?.statusText,
-        responseData: requestError.response?.data,
-        isTimeout: requestError.code === 'ECONNABORTED' || requestError.message?.includes('timeout'),
-        isNetworkError: requestError.code === 'ERR_NETWORK' || requestError.message === 'Network Error',
-      });
-      throw requestError; // Re-throw to be caught by outer catch block
+    // Loop through endpoints until one works or we run out
+    for (const endpoint of endpointsToTry) {
+      try {
+        console.log(`Trying import endpoint: ${endpoint}`);
+
+        // Add flags to query params too (redundancy is safety here)
+        const endpointWithParams = `${endpoint}?autoConvert=false&createBookings=false&createAppointment=false&keepAsPending=true&Status=Approved&skipGenerateBookings=true&companyAdminId=${finalCompanyAdminId || ''}`;
+
+        // For FormData, let axios set Content-Type header with boundary automatically
+        // We use the custom serviceRequestsAPI instance which handles auth headers
+        apiResponse = await serviceRequestsAPI.post(endpointWithParams, formData);
+
+        successEndpoint = endpoint;
+        console.log(`✅ Import successful on endpoint: ${endpoint}`);
+        break; // Stop if successful
+      } catch (error: any) {
+        // If 404, try next endpoint
+        if (error.response?.status === 404) {
+          console.warn(`Endpoint ${endpoint} not found (404), trying next...`);
+          continue;
+        }
+        // If other error (500, 400, etc), throw it immediately
+        // We don't want to retry on logic errors to avoid partial data corruption
+        throw error;
+      }
     }
 
-    // Log the full import response to see what it contains
-    console.log('📥 Import API Response (full):', JSON.stringify(response, null, 2));
-    console.log('Import API Response (summary):', {
-      Status: response.Status,
-      Message: response.Message,
-      hasData: !!response.data,
-      hasObject: !!response.Object,
-      dataKeys: response.data ? Object.keys(response.data) : [],
-      objectKeys: response.Object ? Object.keys(response.Object) : [],
-      dataType: typeof response.data,
-      objectType: typeof response.Object,
-    });
-
-    // Check if backend created bookings instead of service requests
-    const responseData = response.data || response.Object || {};
-    const isArray = Array.isArray(responseData);
-    const firstItem = isArray && responseData.length > 0 ? responseData[0] : responseData;
-    const hasBookingDate = firstItem && (firstItem.BookingDate || firstItem.bookingDate || firstItem.Booking_Date);
-    const hasCalloutId = firstItem && (firstItem.Id || firstItem.CalloutId || firstItem.Callout_Id);
-
-    console.log('🔍 Analyzing import result type:', {
-      isArray,
-      arrayLength: isArray ? responseData.length : 'N/A',
-      firstItem: firstItem,
-      hasBookingDate,
-      hasCalloutId,
-      resultType: hasBookingDate ? 'BOOKINGS (converted immediately)' : hasCalloutId ? 'CALLOUTS (converted immediately)' : 'UNKNOWN (may be service requests)',
-      warning: hasBookingDate || hasCalloutId
-        ? '⚠️ Backend ignored keepAsPending parameter and created bookings/callouts immediately'
-        : '✅ Backend may have created service requests (need to verify)',
-    });
-
-    if (response.Status === 201) {
-      return {
-        Status: 201,
-        Message: response.Message || 'Import completed successfully',
-        data: response.Object || response.data || response,
-      };
-    } else {
-      return {
-        Status: response.Status || 500,
-        Message: response.Message || 'Import failed',
-        data: response.Object || response.data,
-      };
+    if (!apiResponse) {
+      throw new Error('All import endpoints failed or not found (404).');
     }
+
+    // Construct standardized response
+    // The backend might return { Status: 201, Message: "...", data: ... } or just the data
+    const responseData = apiResponse.data || {};
+    const status = responseData.Status || apiResponse.status; // Prefer backend status, fallback to HTTP status
+    const message = responseData.Message || responseData.message || (status >= 200 && status < 300 ? 'Import successful' : 'Import failed');
+
+    // Normalize returned data payload
+    // If responseData has .data or .Object wrapper, use that. Otherwise use responseData itself.
+    const internalData = responseData.data || responseData.Object || responseData;
+
+    console.log('✅ Import completed via', successEndpoint, 'Status:', status);
+
+    return {
+      Status: status,
+      Message: message,
+      data: internalData
+    };
   } catch (err: any) {
     // Enhanced error logging
     console.error('❌ ServiceRequests Import Error:', {
