@@ -21,6 +21,7 @@ import type { ServiceRequest } from '@/lib/types/serviceRequest.types'
 import type { DispatchLog } from '@/lib/types/dispatchLog.types'
 import { fetchServiceRequests, fetchDispatchLogs, fetchImportedServiceRequests } from '@/lib/actions/serviceRequests.actions'
 import { listApprovedUserCredits, generateBookings } from '@/lib/actions/approvedUserCredits.actions'
+import { apiClient } from '@/lib/api/axios-instance'
 import { getCurrentUserAction } from '@/lib/actions/auth.actions'
 import { cancelCallout } from '@/lib/actions/calendar.actions'
 import { useAuthStore } from '@/lib/store/authStore'
@@ -1394,33 +1395,54 @@ export default function ServiceRequestsPage() {
         console.log(`🚀 Dispatching batch ${currentBatch}/${totalBatches}:`, batchIds);
 
         try {
-          // Call Server Action for this batch
-          const response = await generateBookings(batchIds);
+          // DIRECT API CALL (Bypassing Netlify Server Action)
+          // user confirmed CORS/SSL are ready.
 
-          if (response.Status === 201) {
+          /* 
+             Using direct client-side axios call to avoid Netlify 26s timeout.
+             Browser-to-Server connection can last much longer.
+          */
+          const response: any = await apiClient.post('/ApprovedUserCredits/GenerateBookings', batchIds, {
+            timeout: 600000, // 10 minutes (Client side timeout)
+            headers: {
+              'TimeZone': Intl.DateTimeFormat().resolvedOptions().timeZone,
+              'DeviceToken': 'test12345',
+              'IsTest': 'true'
+            }
+          });
+
+          // Normalize response (Client-side axios returns .data directly usually, but check structure)
+          // Our apiClient returns res.data. 
+          // Backend usually returns { Status, Message, data, ... } or { success, ... }
+
+          // If response came back, it means HTTP 200 (mostly), but check logic
+          // Check for success status (201 created, or implicit success)
+          const isSuccess = response.Status === 201 || (response.success === true);
+
+          if (isSuccess) {
             const count = response.data?.bookingsCreated || response.data?.success || 0;
             totalSuccessCount += count;
-
-            // Accumulate
+            // ... (rest of logic)
             aggregatedData.bookingsCreated = (aggregatedData.bookingsCreated || 0) + count;
             aggregatedData.success = (aggregatedData.success || 0) + count;
 
-            console.log(`✅ Batch ${currentBatch} OK: +${count} bookings`);
+            console.log(`✅ Batch ${currentBatch} OK (Direct): +${count} bookings`);
           } else {
-            console.error(`❌ Batch ${currentBatch} Failed:`, response.Message);
-            allErrors.push(`Batch ${currentBatch}: ${response.Message}`);
-            lastStatus = response.Status;
-
-            // Critical auth failure - stop immediately
-            if (response.Status === 401) {
-              toast.error('Session Expired', { id: loadingToast });
-              setIsRunningAutoDispatch(false);
-              return;
-            }
+            // ... handle error
+            const msg = response.Message || 'Unknown error';
+            console.error(`❌ Batch ${currentBatch} Failed:`, msg);
+            allErrors.push(`Batch ${currentBatch}: ${msg}`);
+            lastStatus = response.Status || 500;
           }
         } catch (err: any) {
           console.error(`❌ Batch ${currentBatch} Exception:`, err);
-          allErrors.push(`Batch ${currentBatch} error: ${err.message}`);
+          allErrors.push(`Batch ${currentBatch} error: ${err.message || err}`);
+          // If 401, handle it
+          if (err.response?.status === 401) {
+            toast.error('Session Expired', { id: loadingToast });
+            setIsRunningAutoDispatch(false);
+            return;
+          }
         }
       }
 
