@@ -242,7 +242,7 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
       const response = await importServiceRequests(formData, user.UserID);
 
       if (response.Status === 201) {
-        const successCount = (response.data as any)?.SuccessCount ?? response.data?.success ?? response.data?.count ?? 0;
+        const successCount = (response.data as any)?.SuccessCount ?? (response.data as any)?.success ?? 0;
 
         // Log the full response to see what the backend returns
         console.log('✅ Import successful! Full response:', JSON.stringify(response, null, 2));
