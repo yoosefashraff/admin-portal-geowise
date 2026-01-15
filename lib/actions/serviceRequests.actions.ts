@@ -252,7 +252,11 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
         errorMessage: error.message,
         hasResponse: !!error.response,
         hasRequest: !!error.request,
-        responseData: error.response?.data ? (typeof error.response.data === 'string' ? error.response.data.substring(0, 200) : JSON.stringify(error.response.data).substring(0, 200)) : 'none'
+        responseData: error.response?.data ? (
+          typeof error.response.data === 'string'
+            ? error.response.data.substring(0, 200)
+            : '[Object]' // Avoid stringifying objects in error logs to prevent circular refs/bloat
+        ) : 'none'
       });
       return Promise.reject(error);
     }

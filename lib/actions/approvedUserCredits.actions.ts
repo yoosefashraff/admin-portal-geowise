@@ -816,12 +816,31 @@ export async function generateBookings(creditIds: number[]): Promise<{
     // Normalize response structure
     const responseStatus = response.Status || response.status || (response.success ? 201 : 500)
     const responseMessage = response.Message || response.message || (response.success ? 'Bookings generated successfully' : 'Failed to generate bookings')
-    const responseData = response.Object || response.data || response
+
+    // CRITICAL: Avoid returning huge data objects which can crash Server Actions (Next.js body limit)
+    // Instead of returning all created bookings, return a summary/count
+    let responseDataSummary = null;
+    const rawData = response.Object || response.data || response;
+
+    if (Array.isArray(rawData)) {
+      responseDataSummary = {
+        bookingsCreated: rawData.length,
+        message: `Successfully created ${rawData.length} bookings`,
+        preview: rawData.slice(0, 3) // Only return first 3 for context
+      };
+    } else if (rawData && typeof rawData === 'object') {
+      responseDataSummary = {
+        ...rawData,
+        // If there's a huge list in the object, truncate it
+        Bookings: Array.isArray(rawData.Bookings) ? `[${rawData.Bookings.length} bookings]` : rawData.Bookings,
+        bookings: Array.isArray(rawData.bookings) ? `[${rawData.bookings.length} bookings]` : rawData.bookings
+      };
+    }
 
     return {
       Status: responseStatus,
       Message: responseMessage,
-      data: responseData,
+      data: responseDataSummary || rawData, // Fallback to raw data if small/unknown
       ErrorLogs: response.ErrorLogs
     }
   } catch (error: any) {
