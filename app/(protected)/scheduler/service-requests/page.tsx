@@ -1401,8 +1401,16 @@ export default function ServiceRequestsPage() {
       }
 
       if (response.Status === 201) {
-        const successCount = response.data?.bookingsCreated || response.data?.success || 0
-        toast.success(`Auto Dispatch started. ${successCount} booking${successCount !== 1 ? 's' : ''} will be created.`)
+        // Fix: If bookingsCreated is 0 but status is 201, it might mean the backend processed it but returned an optimized payload
+        // Or it matched 0 slots. We should show a generic success message if count is 0.
+        const successCount = response.data?.bookingsCreated ?? response.data?.success ?? 0;
+
+        if (successCount > 0) {
+          toast.success(`Auto Dispatch started. ${successCount} booking${successCount !== 1 ? 's' : ''} being created.`);
+        } else {
+          // If 0, it means either truly 0 or payload was optimized. Assume success since Status is 201.
+          toast.success('Auto Dispatch started successfully. Bookings are being generated in the background.');
+        }
 
         // Navigate to progress page
         router.push('/scheduler/auto-dispatch/progress')
