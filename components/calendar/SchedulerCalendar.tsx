@@ -535,24 +535,107 @@ export default function SchedulerCalendar() {
   };
 
   const onBookingSubmit = async (bookingPayload: BookingRequestPayload) => {
-    // console.log(bookingPayload);
-    // return;
+    console.log('[onBookingSubmit] 🔍 Submitting new booking:', {
+      ProviderId: bookingPayload.ProviderId,
+      ServiceId: bookingPayload.ServiceId,
+      Date: bookingPayload.Date,
+      Time: bookingPayload.Time,
+      CustomerName: bookingPayload.CustomerName,
+      PhoneNumber: bookingPayload.PhoneNumber,
+      fullPayload: bookingPayload
+    });
+    
     setSubmitLoading(true);
-    const response = await calendarBooking(bookingPayload);
+    
+    try {
+      const response = await calendarBooking(bookingPayload);
+      
+      console.log('[onBookingSubmit] 📥 Booking response:', {
+        Status: response.Status,
+        Message: response.Message,
+        response: response
+      });
 
-    if (response.Status === 201) {
-      toast.success(response.Message);
-      lastFetchParamsRef.current = null;
-      isFetchingRef.current = false;
-      // Update the calendar
-      const fetchStartISO = toISODateString(dateRange.start, '00:00:00');
-      const fetchEndISO = toISODateString(dateRange.end, '23:59:59');
-      fetchAndRenderCalendar(fetchStartISO, fetchEndISO);
-      setSelectedEvent(null);
-    } else {
-      toast.error('Unable to add booking. Please try again.');
+      if (response.Status === 201 || response.Status === 200) {
+        toast.success(response.Message || 'Booking created successfully!');
+        
+        // Close the dialog
+        setNewBookingDialog(false);
+        
+        // Reset fetch cache to force refresh
+        lastFetchParamsRef.current = null;
+        isFetchingRef.current = false;
+        
+        // Check if booking date is within current view, if not, navigate to that date
+        const bookingDate = new Date(bookingPayload.Date);
+        bookingDate.setHours(0, 0, 0, 0); // Normalize to start of day
+        const viewStart = new Date(dateRange.start);
+        viewStart.setHours(0, 0, 0, 0);
+        const viewEnd = new Date(dateRange.end);
+        viewEnd.setHours(23, 59, 59, 999);
+        
+        let finalStart = dateRange.start;
+        let finalEnd = dateRange.end;
+        
+        // If booking date is outside current view, update date range to include it
+        if (bookingDate < viewStart || bookingDate > viewEnd) {
+          console.log('[onBookingSubmit] 📅 Booking date outside current view, updating date range', {
+            bookingDate: bookingDate.toISOString(),
+            viewStart: viewStart.toISOString(),
+            viewEnd: viewEnd.toISOString()
+          });
+          
+          // Expand date range to include booking date
+          finalStart = bookingDate < viewStart ? bookingDate : viewStart;
+          finalEnd = bookingDate > viewEnd ? bookingDate : viewEnd;
+          
+          // Update state
+          setDateRange({ start: finalStart, end: finalEnd });
+          
+          // Update calendar view to show the booking date
+          const calendarApi = calendarRef.current?.getApi();
+          if (calendarApi) {
+            calendarApi.gotoDate(bookingDate);
+          }
+        }
+        
+        // Update the calendar with updated date range
+        const fetchStartISO = toISODateString(finalStart, '00:00:00');
+        const fetchEndISO = toISODateString(finalEnd, '23:59:59');
+        
+        console.log('[onBookingSubmit] 🔄 Refreshing calendar:', {
+          fetchStartISO,
+          fetchEndISO,
+          bookingDate: bookingPayload.Date
+        });
+        
+        await fetchAndRenderCalendar(fetchStartISO, fetchEndISO);
+        setSelectedEvent(null);
+      } else {
+        const errorMsg = response.Message || 'Unable to add booking. Please try again.';
+        console.error('[onBookingSubmit] ❌ Booking failed:', {
+          Status: response.Status,
+          Message: errorMsg,
+          fullResponse: JSON.stringify(response, null, 2),
+          payload: JSON.stringify(bookingPayload, null, 2)
+        });
+        
+        // Show detailed error message
+        const detailedError = `Status: ${response.Status}\nMessage: ${errorMsg}`;
+        console.error('[onBookingSubmit] ❌ Error details:', detailedError);
+        
+        toast.error(`Booking failed (Status ${response.Status}): ${errorMsg}`);
+      }
+    } catch (error: any) {
+      console.error('[onBookingSubmit] ❌ Error creating booking:', {
+        error,
+        message: error.message,
+        response: error.response
+      });
+      toast.error(`Error creating booking: ${error.message || 'Unknown error'}`);
+    } finally {
+      setSubmitLoading(false);
     }
-    setSubmitLoading(false);
   }
 
   return (
@@ -568,8 +651,9 @@ export default function SchedulerCalendar() {
           showDialog={newBookingDialog} 
           setShowDialog={setNewBookingDialog} 
           title="New Booking" 
+          event={undefined} // No event for new bookings
           handleSubmit={onBookingSubmit} 
-          submitLoading={submitLoading}
+          editLoading={submitLoading}
         />
         <Button 
           className="cursor-pointer"

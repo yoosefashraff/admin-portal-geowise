@@ -62,11 +62,20 @@ autodispatch-flow/
 
 ## API Configuration
 
-This project integrates with the ApprovedUserCredits API. The API base URL is configured directly in the service file (`src/services/approvedUserCreditsService.ts`) to match the backend structure.
+This project integrates with the ApprovedUserCredits API. The API base URL is configured to match the main app's environment variables.
 
-**API Base URL:** `https://gw5cn.geowise.ai`
+### Environment Variables
 
-The API uses cookie-based authentication. In development, a Vite proxy is configured to avoid CORS issues.
+The auto-dispatch flow uses the same DEV environment configuration as the main app:
+
+- **`VITE_DEV_API_URL`** (preferred): DEV backend URL (e.g., `https://gw5cndev.geowise.ai`)
+- **`VITE_SERVICE_REQUESTS_API_URL`** (legacy): Alternative DEV backend URL
+
+**Default:** If no environment variable is set, defaults to `https://gw5cndev.geowise.ai` (DEV environment)
+
+**Production:** Uses `https://gw5cn.geowise.ai` when built for production (unless `VITE_DEV_API_URL` is set)
+
+The API uses cookie-based authentication. In development, a Vite proxy is configured to avoid CORS issues. The proxy automatically routes to the DEV backend based on the environment variables.
 
 ### Troubleshooting API Connection Issues
 

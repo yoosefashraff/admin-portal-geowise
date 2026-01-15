@@ -39,37 +39,74 @@ export default function ServiceRequests() {
         const bookings = await fetchServiceRequests()
         
         // Fetch user credits to merge with service requests
-        let creditsMap = new Map<number, { approved: number; used: number; remaining: number; creditId?: number }>()
+        // Use combined key (UserId-ServiceId) for accurate matching
+        let creditsMap = new Map<string, { approved: number; used: number; remaining: number; creditId?: number }>()
         try {
           const credits = await listApprovedUserCredits({ IsActive: true })
+          console.log('🔍 [Auto-Dispatch] Fetched credits:', {
+            creditsCount: credits?.data?.length || 0,
+            credits: credits?.data || []
+          })
+          
           if (credits && credits.data && Array.isArray(credits.data)) {
             credits.data.forEach((credit) => {
               if (credit.UserId && credit.ServiceId) {
-                const key = `${credit.UserId}-${credit.ServiceId}`
-                creditsMap.set(credit.UserId, {
+                // Use combined key: UserId-ServiceId for accurate matching
+                const key = `${credit.UserId}:${credit.ServiceId}`
+                creditsMap.set(key, {
                   approved: credit.ApprovedCredits,
                   used: credit.UsedCredits || 0,
                   remaining: credit.RemainingCredits || 0,
                   creditId: credit.Id,
                 })
+                console.log(`✅ [Auto-Dispatch] Added credit to map: ${key}`, {
+                  approved: credit.ApprovedCredits,
+                  used: credit.UsedCredits || 0,
+                  remaining: credit.RemainingCredits || 0
+                })
               }
             })
           }
+          
+          console.log('🔍 [Auto-Dispatch] Credits map created:', {
+            mapSize: creditsMap.size,
+            mapKeys: Array.from(creditsMap.keys())
+          })
         } catch (creditsError) {
           // Only log if it's not a JSON parsing error (which is expected if API returns HTML)
           if (creditsError instanceof SyntaxError && creditsError.message.includes('JSON')) {
-            console.warn('API returned HTML instead of JSON (may need authentication or correct endpoint):', creditsError.message)
+            console.warn('⚠️ [Auto-Dispatch] API returned HTML instead of JSON (may need authentication or correct endpoint):', creditsError.message)
           } else {
-            console.warn('Failed to fetch credits, continuing without credit data:', creditsError)
+            console.warn('⚠️ [Auto-Dispatch] Failed to fetch credits, continuing without credit data:', creditsError)
           }
         }
 
         // Map API bookings to ServiceRequest format
         const mappedRequests: ServiceRequest[] = bookings.map((booking, index) => {
           const userId = booking.userId || (typeof booking.id === 'number' ? booking.id : undefined)
-          const creditInfo = userId && creditsMap.has(userId) 
-            ? creditsMap.get(userId)! 
-            : { approved: 0, used: 0, remaining: 0 }
+          const serviceId = booking.serviceId
+          
+          // Match credits by both UserId AND ServiceId (most precise)
+          let creditInfo = { approved: 0, used: 0, remaining: 0, creditId: undefined as number | undefined }
+          
+          if (userId && serviceId) {
+            const key = `${userId}:${serviceId}`
+            if (creditsMap.has(key)) {
+              creditInfo = creditsMap.get(key)!
+              console.log(`✅ [Auto-Dispatch] Matched credit for booking ${booking.id}: ${key}`, creditInfo)
+            } else {
+              // Fallback: try matching by UserId only (less precise)
+              const userIdOnlyKey = Array.from(creditsMap.keys()).find(k => k.startsWith(`${userId}:`))
+              if (userIdOnlyKey) {
+                creditInfo = creditsMap.get(userIdOnlyKey)!
+                console.log(`⚠️ [Auto-Dispatch] Matched credit by UserId only (less precise): ${userIdOnlyKey}`, creditInfo)
+              } else {
+                console.log(`⚠️ [Auto-Dispatch] No credit match found for booking ${booking.id}: userId=${userId}, serviceId=${serviceId}`)
+              }
+            }
+          } else {
+            console.log(`⚠️ [Auto-Dispatch] Missing userId or serviceId for booking ${booking.id}: userId=${userId}, serviceId=${serviceId}`)
+          }
 
           return {
             id: String(booking.id || index),

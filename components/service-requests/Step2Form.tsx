@@ -3,11 +3,13 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useEffect } from 'react';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { listApprovedUserCredits } from '@/lib/actions/approvedUserCredits.actions';
 import type { ServiceRequestFormData } from '@/app/(protected)/scheduler/service-requests/new/page';
 
 const step2Schema = z.object({
@@ -37,6 +39,68 @@ export default function Step2Form({ initialData, onNext, onBack }: Step2FormProp
       endTime: initialData?.endTime || '17:00',
     },
   });
+
+  // Auto-populate credits from backend API when customer and service are available
+  useEffect(() => {
+    const loadCredits = async () => {
+      const customerId = initialData?.customerId;
+      const service = initialData?.service;
+      
+      if (!customerId || !service) return;
+      
+      // Parse service to get ServiceId
+      let serviceId: number | undefined = undefined;
+      try {
+        const serviceData = JSON.parse(service || '{}');
+        if (serviceData.Id) {
+          serviceId = parseInt(serviceData.Id);
+        }
+      } catch {
+        // If not JSON, check if it's a numeric ID
+        if (typeof service === 'string' && service.match(/^\d+$/)) {
+          serviceId = parseInt(service);
+        }
+      }
+      
+      if (!serviceId || serviceId === 0) return;
+      
+      // Only fetch if credits aren't already set
+      if (initialData?.approvedCredits !== undefined || initialData?.remainingCredits !== undefined) {
+        return; // Credits already set, don't overwrite
+      }
+      
+      try {
+        const creditsResponse = await listApprovedUserCredits({ 
+          UserId: customerId, 
+          ServiceId: serviceId,
+          IsActive: true 
+        });
+        
+        if (creditsResponse.Status === 201 && creditsResponse.data && Array.isArray(creditsResponse.data)) {
+          const matchingCredit = creditsResponse.data.find(
+            (c: any) => c.UserId === customerId && c.ServiceId === serviceId
+          );
+          
+          if (matchingCredit) {
+            // Auto-populate credits from backend
+            form.setValue('approvedCredits', matchingCredit.ApprovedCredits || 0);
+            form.setValue('usedCredits', matchingCredit.UsedCredits || 0);
+            form.setValue('remainingCredits', matchingCredit.RemainingCredits || 0);
+            console.log('✅ Auto-populated credits from backend:', {
+              approved: matchingCredit.ApprovedCredits,
+              used: matchingCredit.UsedCredits,
+              remaining: matchingCredit.RemainingCredits
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('⚠️ Could not fetch credits for auto-population:', error);
+        // Silently fail - user can still enter credits manually
+      }
+    };
+    
+    loadCredits();
+  }, [initialData?.customerId, initialData?.service, initialData?.approvedCredits, initialData?.remainingCredits, form]);
 
   const onSubmit = (data: z.infer<typeof step2Schema>) => {
     onNext(data);

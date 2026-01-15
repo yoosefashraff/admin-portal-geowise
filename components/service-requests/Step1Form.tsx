@@ -21,6 +21,7 @@ import { useAuthStore } from '@/lib/store/authStore';
 import { getServicesForCompany } from '@/lib/actions/service.actions';
 import { fetchServiceRequests } from '@/lib/actions/serviceRequests.actions';
 import { getAllProvidersForCompany } from '@/lib/actions/provider.actions';
+import { getCustomerByPhoneAndType } from '@/lib/actions/scheduler.actions';
 import type { Customer } from '@/lib/types/scheduler.types';
 import type { CompanyService } from '@/lib/types/service.types';
 import type { ServiceRequestFormData } from '@/app/(protected)/scheduler/service-requests/new/page';
@@ -373,32 +374,74 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
     ) || null;
   }, [customers, nameValue]);
 
-  // Phone-first autofill: When phone number is entered, search and autofill name
+  // Phone-first autofill: When phone number is entered, lookup customer via API
   useEffect(() => {
-    if (phoneNumberValue && phoneNumberValue.trim().length > 0 && countryCodeValue && customers.length > 0) {
-      // Only autofill if name field is empty or was just cleared
+    const lookupCustomer = async () => {
+      // Only lookup if we have phone and country code, and name is empty
+      if (!phoneNumberValue || !phoneNumberValue.trim() || !countryCodeValue) {
+        return;
+      }
+
       const currentName = form.getValues('name');
       if (currentName && currentName.trim().length > 0) {
         // Don't overwrite if user has already entered a name
         return;
       }
 
-      // Search for customer by phone number and country code
-      const matchedCustomer = customers.find((c) => {
-        const customerPhone = c.Contact?.trim() || '';
-        const customerCountryCode = c.CountryCode || '';
-        const inputPhone = phoneNumberValue.trim();
-        
-        // Match phone number (exact or partial) and country code
-        return customerPhone === inputPhone && customerCountryCode === countryCodeValue;
-      });
-
-      if (matchedCustomer && matchedCustomer.Name) {
-        // Auto-fill name when phone matches
-        form.setValue('name', matchedCustomer.Name);
+      // Clean phone number (remove spaces, dashes, parentheses, etc.)
+      const cleanPhone = phoneNumberValue.replace(/[\s\-\(\)]/g, '').trim();
+      
+      // Need at least 7 digits to search (reasonable minimum)
+      if (cleanPhone.length < 7) {
+        return;
       }
-    }
-  }, [phoneNumberValue, countryCodeValue, customers, form]);
+
+      try {
+        console.log('[Step1Form] 🔍 Looking up customer by phone:', {
+          phoneNumber: cleanPhone,
+          countryCode: countryCodeValue
+        });
+        
+        const response = await getCustomerByPhoneAndType(cleanPhone, countryCodeValue, 2);
+        
+        if (response.Status === 201 && response.Object) {
+          const customer = response.Object;
+          
+          // Auto-fill name
+          if (customer.FullName) {
+            form.setValue('name', customer.FullName);
+            console.log('[Step1Form] ✅ Customer found, auto-filled name:', customer.FullName);
+          }
+          
+          // Auto-fill address if available and location is empty
+          const currentLocation = form.getValues('location');
+          if (customer.Address && !currentLocation) {
+            // Store as JSON string to match the format expected by the form
+            const locationData = JSON.stringify({
+              Address: customer.Address,
+              Lat: 0, // API doesn't return coordinates, set to 0
+              Lng: 0
+            });
+            form.setValue('location', locationData);
+            console.log('[Step1Form] ✅ Auto-filled address:', customer.Address);
+          }
+        } else if (response.Status !== 201) {
+          // Customer not found - this is OK, user can enter new customer
+          console.log('[Step1Form] ℹ️ Customer not found for phone:', cleanPhone);
+        }
+      } catch (error: any) {
+        console.error('[Step1Form] ❌ Error looking up customer:', error);
+        // Don't show error to user - silent fail, user can still enter manually
+      }
+    };
+
+    // Debounce the API call to avoid too many requests
+    const timeoutId = setTimeout(() => {
+      lookupCustomer();
+    }, 500); // Wait 500ms after user stops typing
+
+    return () => clearTimeout(timeoutId);
+  }, [phoneNumberValue, countryCodeValue, form]);
 
   // Auto-fill phone number when customer is selected (keep as fallback)
   useEffect(() => {

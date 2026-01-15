@@ -77,6 +77,19 @@ function getServiceRequestsApiUrl(): string {
 export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
   const baseURL = getServiceRequestsApiUrl();
   
+  // Log the baseURL being used (this will show in SERVER terminal, not browser)
+  console.warn('🔧 [createServiceRequestsAxios] Creating axios instance:', {
+    baseURL,
+    isDev: baseURL.includes('gw5cndev') || baseURL.includes('localhost'),
+    envVar: process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
+    note: 'Check SERVER terminal (not browser console) for this log'
+  });
+  
+  // Also log to stderr so it's more visible
+  if (typeof window === 'undefined') {
+    console.error('🔍 [DIAGNOSTIC] ServiceRequestsAxios baseURL:', baseURL);
+  }
+  
   // For dev environment, handle SSL certificate verification issues
   // The dev backend may use a self-signed certificate or certificate not in Node.js CA store
   const isDevEnvironment = baseURL.includes('gw5cndev') || baseURL.includes('localhost');
@@ -95,6 +108,19 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
       "X-Requested-With": "XMLHttpRequest", // Tell backend this is an AJAX request (prevents HTML redirects)
     },
     ...(httpsAgent && { httpsAgent })
+  });
+  
+  // Add interceptor to log actual request URLs
+  instance.interceptors.request.use((config) => {
+    const fullUrl = `${config.baseURL}${config.url}`;
+    console.warn('🌐 [createServiceRequestsAxios] Request interceptor:', {
+      method: config.method?.toUpperCase(),
+      baseURL: config.baseURL,
+      url: config.url,
+      fullUrl,
+      hasHttpsAgent: !!config.httpsAgent
+    });
+    return config;
   });
   
   // Add request interceptor for authentication and FormData handling
@@ -274,7 +300,19 @@ export async function fetchServiceRequests(
   // Use dev environment axios instance (60s timeout)
   const serviceRequestsAPI = await createServiceRequestsAxios();
   
+  // Log the actual URL that will be called
+  const fullUrl = `${baseURL}/api/barber/FetchBookings`;
+  console.warn('🔍 [fetchServiceRequests] Making API call:', {
+    baseURL,
+    endpoint: '/api/barber/FetchBookings',
+    fullUrl,
+    params
+  });
+  
   try {
+    // Use /api/barber/FetchBookings - this matches the calendar actions endpoint
+    // The axios instance baseURL already includes the full domain, so this will be:
+    // https://gw5cndev.geowise.ai/api/barber/FetchBookings
     const response: any = await serviceRequestsAPI.post('/api/barber/FetchBookings', params, {
       headers: {
         TimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -291,14 +329,44 @@ export async function fetchServiceRequests(
     
     return response;
   } catch (err: any) {
+    // Enhanced error logging to diagnose connection issues
+    const errorDetails = {
+      error: err.message,
+      code: err.code,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      baseURL: baseURL,
+      endpoint: '/api/barber/FetchBookings',
+      fullUrl: `${baseURL}/api/barber/FetchBookings`,
+      isTimeout: err.code === 'ETIMEDOUT' || err.message?.includes('timeout'),
+      isConnectionError: err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT',
+      reason: 'Production fallback disabled to ensure dev-only testing',
+      action: 'Please ensure dev backend is running and accessible',
+      note: 'If IP 8.213.23.175 appears, check if gw5cndev.geowise.ai DNS resolves correctly'
+    };
+    
+    console.error('❌ Failed to fetch from DEV environment - NOT falling back to production:', errorDetails);
+    
+    // Return a graceful error response instead of throwing
+    // This prevents the page from completely breaking
+    const errorMessage = err.code === 'ETIMEDOUT' 
+      ? `Connection timeout: The dev backend (${baseURL}) is not responding. Please check if the backend is running and accessible.`
+      : `Failed to fetch service requests: ${err.message}`;
+    
     console.error('❌ Failed to fetch from DEV environment - NOT falling back to production:', {
       error: err.message,
-      status: err.response?.status,
-      reason: 'Production fallback disabled to ensure dev-only testing',
-      action: 'Please ensure dev backend is running and accessible'
+      code: err.code,
+      baseURL,
+      fullUrl: `${baseURL}/api/barber/FetchBookings`,
+      note: 'Returning error response instead of throwing to prevent page crash'
     });
-    // Do NOT fallback to production - throw error instead
-    throw err;
+    
+    // Return error response instead of throwing to allow UI to handle gracefully
+    return {
+      Status: 500,
+      Message: errorMessage,
+      Object: null
+    };
   }
 }
 

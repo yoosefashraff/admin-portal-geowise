@@ -20,7 +20,7 @@ import type { ServiceRequestFormData } from '@/app/(protected)/scheduler/service
 import { toast } from 'sonner';
 
 const step3Schema = z.object({
-  preferredStaff: z.array(z.string()).optional(),
+  preferredStaff: z.array(z.string()).min(1, 'Please select at least one provider/staff member'),
   preferredDays: z.array(z.string()).optional(),
 });
 
@@ -170,7 +170,7 @@ export default function Step3Form({ initialData, onSubmit, onBack, isSubmitting 
             <FormItem className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 mb-4 border-b border-gray-200">
               <div className="flex items-start">
                 <FormLabel className="font-medium !text-gray-900">
-                  Preferred staff
+                  Preferred staff <span className="text-red-500">*</span>
                 </FormLabel>
               </div>
               <div className="flex flex-col gap-2">

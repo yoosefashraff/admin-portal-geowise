@@ -91,17 +91,37 @@ export default function ServiceRequestsPage() {
           hasObject: !!response.Object,
           objectType: Array.isArray(response.Object) ? 'array' : typeof response.Object,
           objectLength: Array.isArray(response.Object) ? response.Object.length : 'N/A',
-          barbersCount: Array.isArray(response.Object) ? response.Object.length : (response.Object ? 1 : 0)
+          barbersCount: Array.isArray(response.Object) ? response.Object.length : (response.Object ? 1 : 0),
+          message: response.Message
         })
         
-        if (response.Status !== 201) {
+        // Handle error responses gracefully
+        if (response.Status !== 201 && response.Status !== 200) {
           // Check if it's an authentication error
           if (response.Status === 401 || response.Status === 403) {
             toast.error('Authentication failed. Please log in again.')
             router.push('/login')
+            setIsLoading(false)
             return
           }
-          throw new Error(response.Message || 'Failed to fetch service requests')
+          
+          // Handle timeout and connection errors
+          const isTimeout = response.Message?.includes('timeout') || 
+                           response.Message?.includes('ETIMEDOUT') ||
+                           response.Status === 500
+          
+          const errorMsg = response.Message || 'Failed to load service requests'
+          setError(errorMsg)
+          
+          if (isTimeout) {
+            toast.error('Connection timeout. The dev backend may not be responding. Please check if the backend is running.')
+          } else {
+            toast.error(errorMsg)
+          }
+          
+          setRequests([])
+          setIsLoading(false)
+          return
         }
 
         // Fetch user credits to merge with service requests

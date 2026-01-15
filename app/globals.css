@@ -947,3 +947,35 @@ button.gm-ui-hover-effect{
 .animate-delay-500 {
   animation-delay: 500ms;
 }
+
+/* Fix Google Maps autocomplete dropdown z-index in dialogs */
+.pac-container {
+  z-index: 9999 !important;
+  pointer-events: auto !important;
+  position: absolute !important;
+}
+
+.pac-item {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  user-select: none !important;
+}
+
+.pac-item:hover {
+  background-color: #f0f0f0 !important;
+}
+
+.pac-item-selected {
+  background-color: #e8f0fe !important;
+}
+
+/* Ensure dialog content allows overflow for autocomplete dropdown */
+[data-slot="dialog-content"] {
+  overflow: visible !important;
+}
+
+/* Ensure pac-container is always above dialog overlay */
+[data-slot="dialog-overlay"] ~ .pac-container,
+.pac-container {
+  z-index: 10000 !important;
+}

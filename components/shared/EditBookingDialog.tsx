@@ -11,7 +11,7 @@ import { Textarea } from "../ui/textarea";
 import dayjs from "dayjs";
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { useAuthStore } from "@/lib/store/authStore";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState, useRef } from "react";
 import { fetchProviderByCompanyId, getCompanyProviderServices } from "@/lib/actions/provider.actions";
 import { Provider } from "@/lib/types/provider.types";
 import { Service } from "@/lib/types/scheduler.types";
@@ -24,7 +24,7 @@ interface EditBookingDialogProps {
   showDialog: boolean;
   setShowDialog: React.Dispatch<React.SetStateAction<boolean>>;
   title: string;
-  event: CalendarEvent;
+  event?: CalendarEvent; // Optional for new bookings
   handleSubmit: (bookingPayload: BookingRequestPayload) => void,
   editLoading: boolean
 }
@@ -48,21 +48,30 @@ export default function EditBookingDialog({showDialog, setShowDialog, handleSubm
   const {user} = useAuthStore();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  
+  // Refs for Google Maps autocomplete
+  const addressInputRef = useRef<HTMLInputElement>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const mapKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyAq2Vf7Ss-yLruim9i_vog14LwVGPBmt_g';
 
-  const timeRanger = event.extendedProps.time && event.extendedProps.time.split('-');
+  // Handle new booking (no event) vs editing existing booking
+  const isNewBooking = !event;
+  const timeRanger = event?.extendedProps?.time ? event.extendedProps.time.split('-') : null;
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+  
   const form = useForm<BookingFormData>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
       ProviderId: '',
       ServiceId: '',
-      Date: event.extendedProps.date || '',
-      Time: timeRanger ? timeRanger[0].trim() : '',
-      EndTime: timeRanger ? timeRanger[1].trim() : '',
+      Date: event?.extendedProps?.date || today,
+      Time: timeRanger ? timeRanger[0].trim() : '09:00',
+      EndTime: timeRanger ? timeRanger[1].trim() : '17:00',
       CountryCode: '+966',
       PhoneNumber: '',
-      CustomerName: event.extendedProps.customer || '',
-      Address: event.extendedProps.location || '',
-      Note: event.extendedProps.note || ''
+      CustomerName: event?.extendedProps?.customer || '',
+      Address: event?.extendedProps?.location || '',
+      Note: event?.extendedProps?.note || ''
     },
   });
 
@@ -72,9 +81,12 @@ export default function EditBookingDialog({showDialog, setShowDialog, handleSubm
     if (response.Status === 201) {
       setProviders(response.Object);
     }
-    const response2 = await getCompanyProviderServices({CompanyAdminId: user.UserID, ProviderId: Number(event.resourceId || 0)});
-    if (response2.Status === 201) {
-      setServices(response2.Object);
+    // Only load services if editing an existing booking with a provider
+    if (event?.resourceId) {
+      const response2 = await getCompanyProviderServices({CompanyAdminId: user.UserID, ProviderId: Number(event.resourceId || 0)});
+      if (response2.Status === 201) {
+        setServices(response2.Object);
+      }
     }
   }
 
@@ -83,18 +95,208 @@ export default function EditBookingDialog({showDialog, setShowDialog, handleSubm
   }, [user]);
 
   useEffect(() => {
-    if (providers.length > 0 && event.resourceId) {
+    if (providers.length > 0 && event?.resourceId) {
       form.setValue('ProviderId', String(event.resourceId));
     }
-  }, [providers]);
+  }, [providers, event?.resourceId, form]);
 
   useEffect(() => {
-    if(services.length > 0) {
+    if(services.length > 0 && event?.extendedProps?.services) {
       const selectedService = services.find((service) => service.ServiceName === event.extendedProps.services);
       form.setValue('ServiceId', String(selectedService?.Id || ''));
     }
-  }, [services]);
+  }, [services, event?.extendedProps?.services, form]);
 
+  // Load services when provider is selected (for new bookings)
+  const selectedProviderId = form.watch('ProviderId');
+  useEffect(() => {
+    if (selectedProviderId && !event && user) {
+      // Load services for selected provider when creating new booking
+      getCompanyProviderServices({CompanyAdminId: user.UserID, ProviderId: Number(selectedProviderId)})
+        .then((response) => {
+          if (response.Status === 201) {
+            setServices(response.Object || []);
+          }
+        })
+        .catch((error) => {
+          console.error('Error loading services:', error);
+        });
+    }
+  }, [selectedProviderId, event, user]);
+
+  // Initialize Google Maps Places Autocomplete for address field
+  useEffect(() => {
+    if (!showDialog) {
+      // Clean up when dialog closes
+      if (autocompleteRef.current) {
+        autocompleteRef.current = null;
+      }
+      return;
+    }
+
+    const initAddressAutocomplete = () => {
+      if (!addressInputRef.current || autocompleteRef.current) return;
+      
+      if (window.google?.maps?.places?.Autocomplete) {
+        try {
+          const autocompleteInstance = new window.google.maps.places.Autocomplete(
+            addressInputRef.current,
+            {
+              fields: ['formatted_address', 'geometry', 'name', 'address_components'],
+            }
+          );
+
+          autocompleteInstance.addListener('place_changed', () => {
+            const place = autocompleteInstance.getPlace();
+
+            if (!place.geometry || !place.geometry.location) {
+              return;
+            }
+
+            // Update form field with formatted address
+            const address = place.formatted_address || place.name || '';
+            
+            // Update the form field
+            form.setValue('Address', address);
+          });
+
+          autocompleteRef.current = autocompleteInstance;
+          
+          console.log('[EditBookingDialog] ✅ Autocomplete initialized:', {
+            inputElement: !!addressInputRef.current,
+            autocompleteInstance: !!autocompleteInstance
+          });
+
+          // Fix z-index and pointer-events after autocomplete is created
+          const fixDropdownStyles = () => {
+            const pacContainer = document.querySelector('.pac-container') as HTMLElement;
+            if (pacContainer) {
+              console.log('[EditBookingDialog] 🔧 Fixing pac-container styles:', {
+                currentZIndex: pacContainer.style.zIndex || window.getComputedStyle(pacContainer).zIndex || 'not set',
+                currentPointerEvents: pacContainer.style.pointerEvents || window.getComputedStyle(pacContainer).pointerEvents || 'not set',
+                parentElement: pacContainer.parentElement?.tagName || 'none'
+              });
+              
+              pacContainer.style.zIndex = '10000';
+              pacContainer.style.pointerEvents = 'auto';
+              pacContainer.style.position = 'absolute';
+              
+              // Also fix all pac-items to be clickable
+              const pacItems = pacContainer.querySelectorAll('.pac-item');
+              console.log('[EditBookingDialog] 🔧 Found pac-items:', pacItems.length);
+              
+              pacItems.forEach((item, index) => {
+                const itemEl = item as HTMLElement;
+                itemEl.style.pointerEvents = 'auto';
+                itemEl.style.cursor = 'pointer';
+                itemEl.style.userSelect = 'none';
+                
+                // Add click handler that stops propagation but doesn't prevent default
+                // (Google Maps needs the default behavior)
+                const clickHandler = (e: MouseEvent) => {
+                  console.log('[EditBookingDialog] 🖱️ pac-item clicked:', index, e.target);
+                  e.stopPropagation(); // Stop event from reaching dialog overlay
+                  // Don't preventDefault - let Google Maps handle it
+                };
+                
+                // Remove existing listener if any, then add new one
+                itemEl.removeEventListener('mousedown', clickHandler);
+                itemEl.addEventListener('mousedown', clickHandler, true); // Use capture phase
+              });
+              
+              console.log('[EditBookingDialog] ✅ Styles applied to pac-container');
+            } else {
+              console.warn('[EditBookingDialog] ⚠️ pac-container not found');
+            }
+          };
+
+          // Fix styles immediately and on input focus/input
+          const applyStyles = () => {
+            setTimeout(fixDropdownStyles, 50);
+          };
+          
+          applyStyles();
+          
+          if (addressInputRef.current) {
+            addressInputRef.current.addEventListener('focus', applyStyles);
+            addressInputRef.current.addEventListener('input', applyStyles);
+            addressInputRef.current.addEventListener('keydown', applyStyles);
+          }
+
+          // Use MutationObserver to fix styles when dropdown appears
+          const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+              if (mutation.addedNodes.length > 0) {
+                mutation.addedNodes.forEach((node) => {
+                  if (node.nodeType === 1) {
+                    const element = node as HTMLElement;
+                    if (element.classList?.contains('pac-container') || element.querySelector?.('.pac-container')) {
+                      applyStyles();
+                    }
+                  }
+                });
+              }
+            });
+          });
+
+          observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+          });
+
+          // Cleanup function
+          const cleanup = () => {
+            observer.disconnect();
+            if (addressInputRef.current) {
+              addressInputRef.current.removeEventListener('focus', applyStyles);
+              addressInputRef.current.removeEventListener('input', applyStyles);
+              addressInputRef.current.removeEventListener('keydown', applyStyles);
+            }
+          };
+
+          return cleanup;
+        } catch (error) {
+          console.error('Failed to initialize address autocomplete:', error);
+        }
+      }
+    };
+
+    // Wait for dialog to fully render before initializing
+    const timeoutId = setTimeout(() => {
+      // Load Google Maps API if not already loaded
+      if (window.google?.maps?.places?.Autocomplete) {
+        initAddressAutocomplete();
+      } else if (!document.querySelector(`script[src*="maps.googleapis.com"]`)) {
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${mapKey}&libraries=places`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => {
+          setTimeout(() => {
+            initAddressAutocomplete();
+          }, 200);
+        };
+        document.head.appendChild(script);
+      } else {
+        // Script exists, wait for it to load
+        const checkInterval = setInterval(() => {
+          if (window.google?.maps?.places?.Autocomplete) {
+            clearInterval(checkInterval);
+            initAddressAutocomplete();
+          }
+        }, 100);
+
+        return () => clearInterval(checkInterval);
+      }
+    }, 200);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (autocompleteRef.current) {
+        autocompleteRef.current = null;
+      }
+    };
+  }, [showDialog, form, mapKey]);
 
   const onSubmit = (data: BookingFormData) => {
     let entTime = convertTo12Hour(data.EndTime);
@@ -105,19 +307,63 @@ export default function EditBookingDialog({showDialog, setShowDialog, handleSubm
     const bookingPayload : BookingRequestPayload = {
       ...data, 
       CompanyUserId : String(user?.UserID || ''),
-      ServiceId: data.ServiceId ?? '',
+      ServiceId: data.ServiceId ?? '0', // Use '0' if empty (for block hours)
       Address: data.Address ?? '',
       Note: data.Note ?? '',
-      Time: convertTo12Hour(data.Time)
+      Time: convertTo12Hour(data.Time),
+      EndTime: entTime || '' // Ensure EndTime is always a string
     };
-    if(event.extendedProps.calloutId) {
+    
+    // Only include calloutId and blockHourId when editing existing booking
+    if(event?.extendedProps?.calloutId) {
       bookingPayload.CalloutId = event.extendedProps.calloutId;
     }
-    if(event.extendedProps.blockHourId) {
+    if(event?.extendedProps?.blockHourId) {
       bookingPayload.BlockHourId = event.extendedProps.blockHourId;
     }
+    
+    console.log('[EditBookingDialog] 📤 Submitting booking payload:', {
+      fullPayload: bookingPayload,
+      hasProviderId: !!bookingPayload.ProviderId,
+      hasDate: !!bookingPayload.Date,
+      hasTime: !!bookingPayload.Time,
+      hasCustomerName: !!bookingPayload.CustomerName,
+      hasPhoneNumber: !!bookingPayload.PhoneNumber,
+      hasCountryCode: !!bookingPayload.CountryCode,
+      hasCompanyUserId: !!bookingPayload.CompanyUserId,
+      serviceId: bookingPayload.ServiceId,
+      endTime: bookingPayload.EndTime
+    });
+    
     handleSubmit(bookingPayload);
   };
+
+  // Inject CSS to fix Google Maps autocomplete z-index issue
+  useEffect(() => {
+    if (!showDialog) return;
+    
+    const styleId = 'google-maps-autocomplete-fix';
+    if (document.getElementById(styleId)) return;
+    
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      .pac-container {
+        z-index: 9999 !important;
+      }
+      [data-slot="dialog-content"] {
+        overflow: visible !important;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      const existingStyle = document.getElementById(styleId);
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+    };
+  }, [showDialog]);
 
   return (
     <Dialog open={showDialog} onOpenChange={() => setShowDialog(false)}>
@@ -300,7 +546,18 @@ export default function EditBookingDialog({showDialog, setShowDialog, handleSubm
                   <FormItem>
                     <FormLabel>Address</FormLabel>
                     <FormControl>
-                      <Input type="text" placeholder="Enter customer address" {...field} />
+                      <Input 
+                        type="text" 
+                        placeholder="Search address with Google Maps" 
+                        {...field}
+                        ref={(e) => {
+                          field.ref(e);
+                          addressInputRef.current = e;
+                        }}
+                        onChange={(e) => {
+                          field.onChange(e.target.value);
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

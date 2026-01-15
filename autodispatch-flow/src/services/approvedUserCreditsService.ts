@@ -1,9 +1,25 @@
 // API Base URL - matches backend configuration
+// Uses same environment variables as main app (VITE_ prefix for Vite)
 // In development, use Vite proxy to avoid CORS issues
 // In production, use direct API URL
-const API_BASE_URL = import.meta.env.DEV 
-  ? '/api' // Use Vite proxy in development
-  : 'https://gw5cn.geowise.ai' // Direct URL in production
+function getApiBaseUrl(): string {
+  // Check for DEV environment variable (same as main app)
+  const devUrl = import.meta.env.VITE_DEV_API_URL || import.meta.env.VITE_SERVICE_REQUESTS_API_URL;
+  
+  if (import.meta.env.DEV) {
+    // Development: Use Vite proxy (which proxies to DEV backend)
+    return '/api';
+  } else {
+    // Production: Use direct URL
+    // If DEV URL is set, use it (for testing), otherwise use production
+    if (devUrl) {
+      return devUrl.replace(/^["']|["']$/g, '').trim();
+    }
+    return 'https://gw5cn.geowise.ai';
+  }
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 /**
  * Get cookies from browser and format as Cookie header value
@@ -168,6 +184,16 @@ export async function listApprovedUserCredits(params: {
 
   const url = `${API_BASE_URL}/ApprovedUserCredits/List?${queryParams.toString()}`
   
+  // Log API configuration for debugging
+  console.log('🔍 [Auto-Dispatch] Credits API Request:', {
+    url,
+    apiBaseUrl: API_BASE_URL,
+    env: import.meta.env.DEV ? 'DEV' : 'PROD',
+    viteDevApiUrl: import.meta.env.VITE_DEV_API_URL || 'not set',
+    viteServiceRequestsApiUrl: import.meta.env.VITE_SERVICE_REQUESTS_API_URL || 'not set',
+    params
+  });
+  
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -191,16 +217,29 @@ export async function listApprovedUserCredits(params: {
 
   const data = await response.json()
   
-  // Handle different response formats
+  console.log('🔍 [Auto-Dispatch] Credits API Response:', {
+    responseType: typeof data,
+    isArray: Array.isArray(data),
+    hasData: !!data.data,
+    hasObject: !!data.Object,
+    hasStatus: 'Status' in data,
+    status: data.Status,
+    keys: Object.keys(data || {})
+  })
+  
+  // Handle different response formats (matching main app's API response format)
   if (Array.isArray(data)) {
     return { data }
   } else if (data.data && Array.isArray(data.data)) {
     return data
+  } else if (data.Object && Array.isArray(data.Object)) {
+    // Main app format: { Status: 201, Object: [...] }
+    return { data: data.Object }
   } else if (data.items && Array.isArray(data.items)) {
     return { data: data.items, ...data }
   } else {
     // Return empty data if format is unexpected
-    console.warn('Unexpected API response format:', data)
+    console.warn('⚠️ [Auto-Dispatch] Unexpected API response format:', data)
     return { data: [] }
   }
 }

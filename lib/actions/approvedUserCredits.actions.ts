@@ -800,6 +800,33 @@ export async function generateBookings(
 
     console.log('Calling GenerateBookings API (Auto-Dispatch) with credit IDs:', creditIds)
     
+    // CRITICAL: Check authentication cookie before making request
+    const { cookies } = await import('next/headers');
+    const cookieStore = await cookies();
+    const authCookie = cookieStore.get('xyzCompAuthorize');
+    
+    if (!authCookie || !authCookie.value) {
+      const errorMsg = 'Authentication required. Please log in again. Your session may have expired.';
+      console.error('❌ GenerateBookings: Authentication cookie missing:', {
+        hasCookie: !!authCookie,
+        hasValue: !!authCookie?.value,
+        allCookies: cookieStore.getAll().map(c => ({ name: c.name, hasValue: !!c.value })),
+        action: 'User needs to log in again'
+      });
+      return {
+        Status: 401,
+        Message: errorMsg,
+        data: undefined
+      };
+    }
+    
+    console.log('✅ GenerateBookings: Authentication cookie found:', {
+      hasCookie: !!authCookie,
+      hasValue: !!authCookie.value,
+      cookieLength: authCookie.value?.length || 0,
+      cookiePreview: authCookie.value ? `${authCookie.value.substring(0, 30)}...` : 'none'
+    });
+    
     // Use service requests axios instance (supports dev environment)
     // This ensures auto-dispatch uses the same dev environment as service requests import
     const serviceRequestsAPI = await createServiceRequestsAxios()
@@ -941,6 +968,22 @@ export async function generateBookings(
       isSuccess: responseStatus === 201
     })
     
+    // Handle 401 Unauthorized in response
+    if (responseStatus === 401) {
+      const authErrorMessage = 'Authentication failed. Your session may have expired. Please log out and log back in, then try again.';
+      console.error('❌ GenerateBookings: API returned 401 Unauthorized:', {
+        responseStatus,
+        responseMessage,
+        responseData,
+        action: 'User should log out and log back in'
+      });
+      return {
+        Status: 401,
+        Message: authErrorMessage,
+        data: responseData
+      };
+    }
+    
     if (responseStatus === 201 || responseStatus === 200) {
       return { 
         Status: 201, 
@@ -990,14 +1033,28 @@ export async function generateBookings(
     // Provide more specific error messages based on error type
     let errorMessage = 'Failed to generate bookings'
     
-    if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+    // Handle 401 Unauthorized errors specifically
+    if (err.response?.status === 401) {
+      errorMessage = 'Authentication failed. Your session may have expired. Please log out and log back in, then try again.';
+      console.error('❌ GenerateBookings: 401 Unauthorized - Authentication failed:', {
+        status: 401,
+        responseData: err.response?.data,
+        possibleCauses: [
+          'Session expired - user needs to log in again',
+          'Cookie not being sent correctly',
+          'Cookie invalid or corrupted',
+          'Backend authentication service unavailable'
+        ],
+        action: 'User should log out and log back in'
+      });
+    } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
       errorMessage = 'Request timed out. The server may be processing. Please try again or check server logs.'
     } else if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
       errorMessage = `Cannot connect to backend (${baseURL}). Please verify the backend is running and accessible.`
     } else if (err.response?.status === 404) {
       errorMessage = `Endpoint not found: ${endpoint}. Please verify the backend endpoint path.`
-    } else if (err.response?.status === 401 || err.response?.status === 403) {
-      errorMessage = 'Authentication failed. Please log in again.'
+    } else if (err.response?.status === 403) {
+      errorMessage = 'Access forbidden. You do not have permission to perform this action.'
     } else if (err.response?.status >= 500) {
       errorMessage = `Server error (${err.response?.status}): ${err.response?.statusText || 'Internal server error'}. Please check backend logs.`
     } else if (err.response?.status >= 400) {

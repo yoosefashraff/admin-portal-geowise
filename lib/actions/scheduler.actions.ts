@@ -98,6 +98,66 @@ export interface CreateCustomerResponse {
   Customer?: Customer;
 }
 
+export interface GetCustomerByPhoneResponse {
+  Status: number;
+  Message?: string;
+  Object?: {
+    UserId: number;
+    FullName: string;
+    Address?: string;
+  };
+}
+
+/**
+ * Get customer information by phone number and country code
+ * GET /company/GetCustomerByPhoneAndType
+ */
+export async function getCustomerByPhoneAndType(
+  phoneNumber: string,
+  countryCode: string,
+  userType: number = 2
+): Promise<GetCustomerByPhoneResponse> {
+  try {
+    console.log('[getCustomerByPhoneAndType] 🔍 Looking up customer:', {
+      phoneNumber,
+      countryCode,
+      userType
+    });
+
+    const response: GetCustomerByPhoneResponse = await serverAPI.get(
+      '/company/GetCustomerByPhoneAndType',
+      {
+        params: {
+          PhoneNumber: phoneNumber,
+          CountryCode: countryCode,
+          userType: userType
+        }
+      }
+    );
+
+    console.log('[getCustomerByPhoneAndType] 📥 Response:', {
+      Status: response.Status,
+      Message: response.Message,
+      hasCustomer: !!response.Object
+    });
+
+    return response;
+  } catch (err: any) {
+    console.error('[getCustomerByPhoneAndType] ❌ Error:', {
+      message: err.message,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      data: err.response?.data
+    });
+
+    const errorMessage = err.response?.data?.Message || err.response?.statusText || err.message;
+    return {
+      Status: err.response?.status || 500,
+      Message: errorMessage
+    };
+  }
+}
+
 /**
  * Create a new customer in the database.
  * This should be called before creating a booking to ensure the customer exists.
@@ -165,14 +225,23 @@ export async function addCustomerBookings(data : SchedulerSubmitData) : Promise<
       CustomerId: data.CustomerId,
       Address: data.Address,
       CompanyUserId: data.CompanyUserId,
-      fullPayload: data
+      Date: data.Date,
+      TimingSlot: data.TimingSlot,
+      DateFormat: 'YYYY-MM-DD',
+      TimingSlotFormat: 'HH:MM AM/PM-HH:MM AM/PM (e.g., "09:00 AM-05:00 PM")',
+      DateLength: data.Date?.length,
+      TimingSlotLength: data.TimingSlot?.length,
+      DateType: typeof data.Date,
+      TimingSlotType: typeof data.TimingSlot,
+      fullPayload: JSON.stringify(data, null, 2)
     });
     
     const response : {Status : number, Message : string} = await serverAPI.post('/company/addcustomerbookings', data);
     
     console.log('[addCustomerBookings] 📥 Response received:', {
       Status: response.Status,
-      Message: response.Message
+      Message: response.Message,
+      response: response
     });
     
     return {Status : response.Status, Message : response.Message};
@@ -183,7 +252,10 @@ export async function addCustomerBookings(data : SchedulerSubmitData) : Promise<
       status: err.response?.status,
       statusText: err.response?.statusText,
       data: err.response?.data,
-      requestData: data
+      requestData: JSON.stringify(data, null, 2),
+      Date: data.Date,
+      TimingSlot: data.TimingSlot,
+      note: 'If error mentions DateTime, check Date and TimingSlot formats'
     });
     
     const errorMessage = err.response?.data?.Message || err.response?.statusText || err.message;

@@ -93,11 +93,12 @@ export function DashboardSidebar() {
           icon: Users,
           href: "/linked-users",
         },
-        {
-          label: "Approved Credits",
-          icon: CreditCard,
-          href: "/credits",
-        },
+        // Temporarily hidden - credits are managed from service request form
+        // {
+        //   label: "Approved Credits",
+        //   icon: CreditCard,
+        //   href: "/credits",
+        // },
       ],
     },
     {
