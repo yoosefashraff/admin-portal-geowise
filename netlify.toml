@@ -12,7 +12,7 @@
 
 [context.production]
   # Production branch (usually main/master)
-  branch = "main"
+  branch = "master"
   command = "npm run build"
 
 # Environment variables can be set per context in Netlify dashboard
