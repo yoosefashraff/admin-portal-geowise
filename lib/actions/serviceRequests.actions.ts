@@ -21,15 +21,15 @@ function getServiceRequestsApiUrl(): string {
   // Legacy variable (backward compatibility)
   const legacyDevUrl = process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
   const prodUrl = process.env.NEXT_PUBLIC_API_URL;
-  
+
   // Remove quotes if present (common mistake in .env files)
   const cleanDevUrl = devUrl ? devUrl.replace(/^["']|["']$/g, '').trim() : undefined;
   const cleanLegacyDevUrl = legacyDevUrl ? legacyDevUrl.replace(/^["']|["']$/g, '').trim() : undefined;
   const cleanProdUrl = prodUrl ? prodUrl.replace(/^["']|["']$/g, '').trim() : undefined;
-  
+
   // Use new dev variable first, then legacy
   const finalDevUrl = cleanDevUrl || cleanLegacyDevUrl;
-  
+
   // CRITICAL: Require dev environment - do NOT fall back to production
   if (!finalDevUrl) {
     const errorMsg = 'Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.';
@@ -44,11 +44,11 @@ function getServiceRequestsApiUrl(): string {
     });
     throw new Error(errorMsg);
   }
-  
+
   // Normalize URL - remove trailing slash (axios will add it when needed)
   // Paths in axios calls start with /, so baseURL should not have trailing slash
   const baseUrl = finalDevUrl.replace(/\/+$/, '');
-  
+
   // Warn if dev environment uses HTTP (should use HTTPS)
   if (typeof window === 'undefined' && finalDevUrl.startsWith('http://')) {
     console.warn('⚠️ WARNING: Dev environment URL uses HTTP instead of HTTPS:', {
@@ -57,7 +57,7 @@ function getServiceRequestsApiUrl(): string {
       reason: 'HTTPS is required to avoid mixed content security issues when frontend is served over HTTPS'
     });
   }
-  
+
   // Log which environment is being used
   if (typeof window === 'undefined') {
     console.warn('🔧 Service Requests API URL:', {
@@ -68,7 +68,7 @@ function getServiceRequestsApiUrl(): string {
       note: cleanLegacyDevUrl ? 'Using legacy NEXT_PUBLIC_SERVICE_REQUESTS_API_URL' : 'Using NEXT_PUBLIC_DEV_API_URL'
     });
   }
-  
+
   return baseUrl;
 }
 
@@ -79,7 +79,7 @@ function getServiceRequestsApiUrl(): string {
  */
 export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
   const baseURL = getServiceRequestsApiUrl();
-  
+
   // Log the baseURL being used (this will show in SERVER terminal, not browser)
   console.warn('🔧 [createServiceRequestsAxios] Creating axios instance:', {
     baseURL,
@@ -87,21 +87,21 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
     envVar: process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
     note: 'Check SERVER terminal (not browser console) for this log'
   });
-  
+
   // Also log to stderr so it's more visible
   if (typeof window === 'undefined') {
     console.error('🔍 [DIAGNOSTIC] ServiceRequestsAxios baseURL:', baseURL);
   }
-  
+
   // For dev environment, handle SSL certificate verification issues
   // The dev backend may use a self-signed certificate or certificate not in Node.js CA store
   const isDevEnvironment = baseURL.includes('gw5cndev') || baseURL.includes('localhost');
-  const httpsAgent = isDevEnvironment 
+  const httpsAgent = isDevEnvironment
     ? new (require('https').Agent)({
-        rejectUnauthorized: false // Only for dev - allows self-signed certs
-      })
+      rejectUnauthorized: false // Only for dev - allows self-signed certs
+    })
     : undefined;
-  
+
   const instance = axios.create({
     baseURL,
     timeout: 120000, // 120 seconds for long-running operations like booking generation
@@ -112,7 +112,7 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
     },
     ...(httpsAgent && { httpsAgent })
   });
-  
+
   // Add interceptor to log actual request URLs
   instance.interceptors.request.use((config) => {
     const fullUrl = `${config.baseURL}${config.url}`;
@@ -125,7 +125,7 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
     });
     return config;
   });
-  
+
   // Add request interceptor for authentication and FormData handling
   // IMPORTANT: Read cookie fresh on each request to ensure we have the latest value
   instance.interceptors.request.use(
@@ -134,11 +134,11 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
       const cookieStore = await cookies();
       const cookie = cookieStore.get('xyzCompAuthorize');
       const token = cookie?.value;
-      
+
       // Log all available cookies for debugging
       const allCookies = cookieStore.getAll();
       const cookieNames = allCookies.map(c => c.name);
-      
+
       if (token && config.headers) {
         // Set Cookie header in the format: Cookie: xyzCompAuthorize=<token>
         config.headers.Cookie = `xyzCompAuthorize=${token}`;
@@ -172,17 +172,17 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
         });
         console.error('⚠️ ================================================');
       }
-      
+
       // Remove Content-Type for FormData - axios will set it automatically with boundary
       if (config.data instanceof FormData && config.headers) {
         delete config.headers['Content-Type'];
       }
-      
+
       return config;
     },
     (error) => Promise.reject(error)
   );
-  
+
   // Add response interceptor to return data directly
   instance.interceptors.response.use(
     (response) => {
@@ -190,11 +190,11 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
       const contentType = response.headers['content-type'] || response.headers['Content-Type'] || '';
       const isJson = contentType.includes('application/json');
       const isHtml = contentType.includes('text/html') || contentType.includes('text/plain');
-      
+
       // Check if response is HTML (error page) instead of JSON
       const data = response.data;
       const isHtmlContent = typeof data === 'string' && (data.includes('<html') || data.includes('<!DOCTYPE') || data.trim().startsWith('<'));
-      
+
       if (isHtml || isHtmlContent) {
         // Extract title or key text from HTML for better error messages
         let htmlPreview = typeof data === 'string' ? data.substring(0, 1000) : 'not a string';
@@ -211,7 +211,7 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
           else if (data.includes('404') || data.includes('Not Found')) errorHint = '404 Not Found (endpoint may not exist)';
           else if (data.includes('401') || data.includes('Unauthorized')) errorHint = '401 Unauthorized (authentication failed)';
         }
-        
+
         console.error('❌ Backend returned HTML instead of JSON:', {
           url: response.config?.url,
           baseURL: response.config?.baseURL,
@@ -235,7 +235,7 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
         error.config = response.config;
         return Promise.reject(error);
       }
-      
+
       // Validate JSON response
       if (!isJson && typeof data !== 'object' && typeof data !== 'string') {
         console.warn('⚠️ Unexpected response format:', {
@@ -244,7 +244,7 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
           preview: typeof data === 'string' ? data.substring(0, 200) : String(data).substring(0, 200)
         });
       }
-      
+
       return data;
     },
     (error) => {
@@ -265,7 +265,7 @@ export async function createServiceRequestsAxios(): Promise<AxiosInstance> {
       return Promise.reject(error);
     }
   );
-  
+
   return instance;
 }
 
@@ -294,7 +294,7 @@ export async function fetchServiceRequests(
   // CRITICAL: Use dev environment for fetching if configured
   // This ensures we fetch from the same environment where we import data
   const baseURL = getServiceRequestsApiUrl(); // This throws if dev not configured
-  
+
   console.warn('🔍 Fetching service requests:', {
     environment: 'DEV',
     apiUrl: baseURL,
@@ -304,7 +304,7 @@ export async function fetchServiceRequests(
 
   // Use dev environment axios instance (60s timeout)
   const serviceRequestsAPI = await createServiceRequestsAxios();
-  
+
   // Log the actual URL that will be called
   const fullUrl = `${baseURL}/api/barber/FetchBookings`;
   console.warn('🔍 [fetchServiceRequests] Making API call:', {
@@ -313,7 +313,7 @@ export async function fetchServiceRequests(
     fullUrl,
     params
   });
-  
+
   try {
     // Use /api/barber/FetchBookings - this matches the calendar actions endpoint
     // The axios instance baseURL already includes the full domain, so this will be:
@@ -325,13 +325,13 @@ export async function fetchServiceRequests(
         IsTest: 'true'
       }
     });
-    
+
     console.warn('✅ Fetched service requests from DEV environment:', {
       status: response.Status,
       hasObject: !!response.Object,
       objectType: Array.isArray(response.Object) ? 'array' : typeof response.Object
     });
-    
+
     return response;
   } catch (err: any) {
     // Enhanced error logging to diagnose connection issues
@@ -349,15 +349,15 @@ export async function fetchServiceRequests(
       action: 'Please ensure dev backend is running and accessible',
       note: 'If IP 8.213.23.175 appears, check if gw5cndev.geowise.ai DNS resolves correctly'
     };
-    
+
     console.error('❌ Failed to fetch from DEV environment - NOT falling back to production:', errorDetails);
-    
+
     // Return a graceful error response instead of throwing
     // This prevents the page from completely breaking
-    const errorMessage = err.code === 'ETIMEDOUT' 
+    const errorMessage = err.code === 'ETIMEDOUT'
       ? `Connection timeout: The dev backend (${baseURL}) is not responding. Please check if the backend is running and accessible.`
       : `Failed to fetch service requests: ${err.message}`;
-    
+
     console.error('❌ Failed to fetch from DEV environment - NOT falling back to production:', {
       error: err.message,
       code: err.code,
@@ -365,7 +365,7 @@ export async function fetchServiceRequests(
       fullUrl: `${baseURL}/api/barber/FetchBookings`,
       note: 'Returning error response instead of throwing to prevent page crash'
     });
-    
+
     // Return error response instead of throwing to allow UI to handle gracefully
     return {
       Status: 500,
@@ -383,7 +383,7 @@ export async function fetchServiceRequests(
 export async function fetchImportedServiceRequests(): Promise<{ Status: number; Message?: string; data?: any[] }> {
   // Use custom axios instance for service requests (may point to dev environment)
   const serviceRequestsAPI = await createServiceRequestsAxios();
-  
+
   // Try different possible endpoints for listing imported service requests
   const possibleEndpoints = [
     '/ApprovedUserCredits/Imported',  // Most likely - same controller as import
@@ -397,7 +397,7 @@ export async function fetchImportedServiceRequests(): Promise<{ Status: number; 
     '/ServiceRequests',
     '/ServiceRequest',
   ];
-  
+
   // Try each endpoint until one works
   for (const endpoint of possibleEndpoints) {
     try {
@@ -405,7 +405,7 @@ export async function fetchImportedServiceRequests(): Promise<{ Status: number; 
       console.warn(`🔍 Trying to fetch imported service requests from: ${endpoint}`);
       console.warn(`   Full URL: ${fullUrl}`);
       const response: any = await serviceRequestsAPI.get(endpoint);
-      
+
       console.warn(`📥 Response from ${endpoint}:`, {
         Status: response.Status,
         isArray: Array.isArray(response),
@@ -415,7 +415,7 @@ export async function fetchImportedServiceRequests(): Promise<{ Status: number; 
         responseType: typeof response,
         responseKeys: typeof response === 'object' ? Object.keys(response) : []
       });
-      
+
       if (response.Status === 201 || Array.isArray(response)) {
         const data = Array.isArray(response) ? response : (response.Object || response.data || []);
         if (Array.isArray(data) && data.length > 0) {
@@ -441,7 +441,7 @@ export async function fetchImportedServiceRequests(): Promise<{ Status: number; 
       continue;
     }
   }
-  
+
   // If all endpoints failed, return empty array
   console.warn('⚠️ Could not fetch imported service requests from any endpoint. They may not be available via API yet.');
   console.warn('💡 IMPORTANT: Imported records may have been converted to bookings and will appear in the regular service requests list.');
@@ -761,7 +761,7 @@ export async function processCustomers(
 
       // Extract country code (required) - convert to calling code format
       // Import may have country code as "US", "SA", etc. - need to convert to calling code like "+1", "+966"
-      let countryCodeStr = 
+      let countryCodeStr =
         (row['Country Code'] ||
           row.CountryCode ||
           row.countryCode ||
@@ -854,7 +854,7 @@ export async function processCustomers(
           const newCustomerId =
             createResponse.CustomerId ||
             createResponse.Customer?.Id ||
-            createResponse.Customer?.UserId;
+            (createResponse.Customer as any)?.UserId;
 
           if (newCustomerId) {
             customerMap.set(phone, newCustomerId);
@@ -1061,14 +1061,14 @@ export async function importServiceRequests(
       dataType: typeof response.data,
       objectType: typeof response.Object,
     });
-    
+
     // Check if backend created bookings instead of service requests
     const responseData = response.data || response.Object || {};
     const isArray = Array.isArray(responseData);
     const firstItem = isArray && responseData.length > 0 ? responseData[0] : responseData;
     const hasBookingDate = firstItem && (firstItem.BookingDate || firstItem.bookingDate || firstItem.Booking_Date);
     const hasCalloutId = firstItem && (firstItem.Id || firstItem.CalloutId || firstItem.Callout_Id);
-    
+
     console.log('🔍 Analyzing import result type:', {
       isArray,
       arrayLength: isArray ? responseData.length : 'N/A',
@@ -1076,7 +1076,7 @@ export async function importServiceRequests(
       hasBookingDate,
       hasCalloutId,
       resultType: hasBookingDate ? 'BOOKINGS (converted immediately)' : hasCalloutId ? 'CALLOUTS (converted immediately)' : 'UNKNOWN (may be service requests)',
-      warning: hasBookingDate || hasCalloutId 
+      warning: hasBookingDate || hasCalloutId
         ? '⚠️ Backend ignored keepAsPending parameter and created bookings/callouts immediately'
         : '✅ Backend may have created service requests (need to verify)',
     });

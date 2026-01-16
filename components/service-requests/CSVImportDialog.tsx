@@ -40,7 +40,7 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
   const [isValidating, setIsValidating] = useState(false);
   const [isProcessingCustomers, setIsProcessingCustomers] = useState(false);
   const [customerProcessingResult, setCustomerProcessingResult] = useState<{ created: number; existing: number; errors: string[] } | null>(null);
-  
+
   // Maximum file size: 10MB
   const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -59,10 +59,10 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
       'application/vnd.ms-excel', // .xls
     ];
-    
+
     const hasValidExtension = validExtensions.some(ext => selectedFile.name.toLowerCase().endsWith(ext));
     const hasValidType = validTypes.some(type => selectedFile.type.includes(type));
-    
+
     if (!hasValidExtension && !hasValidType) {
       const errorMsg = 'Invalid file type. Only Excel files (.xlsx, .xls) are allowed';
       setParseError(errorMsg);
@@ -73,28 +73,28 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
     // Parse Excel file client-side to show preview
     setIsParsing(true);
     setParseError(null);
-    
+
     try {
       const arrayBuffer = await selectedFile.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-      
+
       if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
         throw new Error('Excel file contains no sheets');
       }
-      
+
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
-      
+
       if (!worksheet) {
         throw new Error('Could not read worksheet data');
       }
-      
+
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
-      
+
       if (!jsonData || jsonData.length === 0) {
         throw new Error('Excel file contains no data rows');
       }
-      
+
       setParsedData(jsonData);
       setFile(selectedFile);
       setParseError(null);
@@ -146,7 +146,7 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
 
   const handleImport = async () => {
     if (!file || !parsedData.length) return;
-    
+
     if (!user?.UserID) {
       toast.error('User authentication required. Please log out and log back in.');
       return;
@@ -163,7 +163,7 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
       // Step 1: Validate services exist
       console.log('🔍 Step 1: Validating services...');
       toast.loading('Validating services...', { id: 'import-validation' });
-      
+
       // Convert parsedData to plain objects to avoid React Server Action serialization errors
       const plainData = parsedData.map(row => {
         const plainRow: any = {};
@@ -179,9 +179,9 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
         });
         return plainRow;
       });
-      
+
       const validation = await validateImportData(plainData, user.UserID);
-      
+
       setValidationErrors(validation.errors);
       setValidationWarnings(validation.warnings);
       setServiceValidation(validation.serviceValidation);
@@ -242,50 +242,47 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
       const response = await importServiceRequests(formData, user.UserID);
 
       if (response.Status === 201) {
-        const successCount = response.data?.SuccessCount || response.data?.success || response.data?.count || 0;
-        
+        const res = response as any;
+        const responseDataRaw = res.data;
+        const successCount = responseDataRaw?.SuccessCount || responseDataRaw?.success || responseDataRaw?.count || 0;
+
         // Log the full response to see what the backend returns
         console.log('✅ Import successful! Full response:', JSON.stringify(response, null, 2));
         console.log('📊 Import response details:', {
-          Status: response.Status,
-          Message: response.Message,
-          data: response.data,
-          hasObject: !!response.Object,
-          objectType: typeof response.Object,
-          objectIsArray: Array.isArray(response.Object),
-          objectLength: Array.isArray(response.Object) ? response.Object.length : 'N/A',
+          Status: res.Status,
+          Message: res.Message,
+          data: res.data,
+          hasObject: !!res.Object,
+          objectType: typeof res.Object,
+          objectIsArray: Array.isArray(res.Object),
+          objectLength: Array.isArray(res.Object) ? res.Object.length : 'N/A',
         });
-        
+
         // Check if backend created bookings instead of service requests
-        const responseData = response.data || response.Object || {};
-        const hasBookings = Array.isArray(responseData) && responseData.length > 0 && responseData[0]?.BookingDate;
-        const hasServiceRequests = Array.isArray(responseData) && responseData.length > 0 && !responseData[0]?.BookingDate;
-        
+        const importData = res.data || res.Object || {};
+        const hasBookings = Array.isArray(importData) && importData.length > 0 && importData[0]?.BookingDate;
+
         console.log('🔍 Checking import result type:', {
           hasBookings,
-          hasServiceRequests,
-          dataSample: Array.isArray(responseData) ? responseData[0] : responseData,
-          warning: hasBookings ? '⚠️ Backend created BOOKINGS instead of service requests - they may not appear in service requests list' : '✅ Backend created service requests',
+          dataSample: Array.isArray(importData) ? importData[0] : importData,
+          warning: hasBookings ? '⚠️ Backend created BOOKINGS instead of service requests' : '✅ Backend created service requests',
         });
-        
+
         // Show success message with summary
-        const customerSummary = response.data?.customerProcessing;
+        const customerSummary = res.data?.customerProcessing;
         const existingCustomers = customerSummary?.existing || 0;
         const createdCustomers = customerSummary?.created || 0;
-        
+
         let message = `Import completed successfully! ${successCount} record(s) imported.`;
         if (existingCustomers > 0) {
-          message += `\n⚠️ ${existingCustomers} customer(s) matched to existing records - names may differ from import file.`;
+          message += `\n⚠️ ${existingCustomers} customer(s) matched to existing records.`;
         }
         if (createdCustomers > 0) {
           message += `\n✅ ${createdCustomers} new customer(s) created.`;
         }
-        
-        toast.success(
-          message,
-          { id: 'import-requests', duration: 7000 }
-        );
-        
+
+        toast.success(message, { id: 'import-requests', duration: 7000 });
+
         // Show detailed warning if customers were matched
         if (existingCustomers > 0) {
           setTimeout(() => {
@@ -298,7 +295,7 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
             );
           }, 2000);
         }
-        
+
         // Show customer processing summary if available
         if (customerResult.created > 0 || customerResult.existing > 0) {
           toast.info(
@@ -306,7 +303,7 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
             { duration: 4000 }
           );
         }
-        
+
         // Warn if backend created bookings instead of service requests
         if (hasBookings) {
           toast.warning(
@@ -320,29 +317,29 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
             { duration: 6000 }
           );
         }
-        
+
         // Show errors if any
-        if (response.data?.ErrorLogs && response.data.ErrorLogs.length > 0) {
-          const errorCount = response.data.ErrorLogs.length;
-          const errorMessages = response.data.ErrorLogs.slice(0, 3).join('; ');
+        if (responseDataRaw?.ErrorLogs && responseDataRaw.ErrorLogs.length > 0) {
+          const errorCount = responseDataRaw.ErrorLogs.length;
+          const errorMessages = responseDataRaw.ErrorLogs.slice(0, 3).join('; ');
           toast.error(
             `Import failed: ${errorCount} error(s). ${errorMessages}${errorCount > 3 ? '...' : ''}`,
             { duration: 10000 }
           );
-          console.error('Import errors:', response.data.ErrorLogs);
-        } else if (response.data?.errors && response.data.errors.length > 0) {
-          toast.warning(`${response.data.errors.length} error(s) occurred during import`);
-          console.warn('Import errors:', response.data.errors);
+          console.error('Import errors:', responseDataRaw.ErrorLogs);
+        } else if (res.data?.errors && res.data.errors.length > 0) {
+          toast.warning(`${res.data.errors.length} error(s) occurred during import`);
+          console.warn('Import errors:', res.data.errors);
         }
-        
+
         // Show specific error if import failed
-        if (successCount === 0 && response.data?.ErrorCount > 0) {
+        if (successCount === 0 && responseDataRaw?.ErrorCount > 0) {
           toast.error(
-            `Import failed: ${response.data.ErrorCount} error(s). Check console for details.`,
+            `Import failed: ${responseDataRaw.ErrorCount} error(s). Check console for details.`,
             { duration: 8000 }
           );
         }
-        
+
         // Don't pass parsedData to avoid React Server Action serialization errors
         // Parent will reload from API anyway
         onImport(undefined);
@@ -398,10 +395,10 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
             onDrop={handleDrop}
             className={`
               relative border-2 border-dashed rounded-lg p-8 text-center transition-all
-              ${dragActive 
-                ? 'border-primary-500 bg-primary-50' 
-                : file 
-                  ? 'border-green-300 bg-green-50' 
+              ${dragActive
+                ? 'border-primary-500 bg-primary-50'
+                : file
+                  ? 'border-green-300 bg-green-50'
                   : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'
               }
               ${isParsing ? 'pointer-events-none opacity-60' : 'cursor-pointer'}
@@ -504,7 +501,7 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
                   )}
                 </div>
               </div>
-              
+
               {/* Preview of parsed data */}
               {parsedData.length > 0 && (
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -626,8 +623,8 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
 
         <div className="px-6 py-4 flex-shrink-0 border-t border-gray-200 bg-gray-50">
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={handleClose}
               disabled={isProcessing}
             >
@@ -651,8 +648,8 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
                   {isValidating
                     ? 'Validating...'
                     : isProcessingCustomers
-                    ? 'Processing customers...'
-                    : 'Importing...'}
+                      ? 'Processing customers...'
+                      : 'Importing...'}
                 </>
               ) : (
                 <>
