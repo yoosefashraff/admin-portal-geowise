@@ -24,8 +24,10 @@ import CompanyServiceItem from '@/components/shared/CompanyServiceItem';
 import { ButtonGroup } from '@/components/ui/button-group';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
+import ServiceGroupSkeleton from '@/components/skeleton/ServiceGroupSkeleton';
+import ServiceGroupItem from '@/components/shared/ServiceGroupItem';
 
-export default function ServiceLists() {
+export default function ServiceGroupsPage() {
   const [value, setValue] = useState<string>();
   const [searchQuery, setSearchQuery] = useState('');
   const {user} = useAuthStore();
@@ -94,10 +96,10 @@ export default function ServiceLists() {
     <div className='max-w-5xl mx-auto py-8 px-6'>
 
       <ButtonGroup className='mb-6'>
-        <Button variant="outline" className="bg-gray-50" size="lg">
+        <Button variant="outline" className="cursor-pointer" onClick={() => router.push('/services') } size="lg">
           Services
         </Button>
-        <Button variant="outline" className="cursor-pointer" onClick={() => router.push('/services/groups') } size="lg">
+        <Button variant="outline" className="bg-gray-50" size="lg">
           Service Groups
         </Button>
       </ButtonGroup>
@@ -105,13 +107,13 @@ export default function ServiceLists() {
       {/* Header */}
       <div className="flex items-start">
         <DashboardHeader
-          title="Services"
+          title="Services Groups"
           description="You will be able to assign service zones to each user on the next step."
           className="flex-1"
         />
-        <Link href="/services/add-new" className="h-9 cursor-pointer text-sm px-3 py-2 border border-gray-300 rounded-lg bg-gray-900 font-medium text-white flex items-center gap-2">
+        <Link href="/services/groups/add-new" className="h-9 cursor-pointer text-sm px-3 py-2 border border-gray-300 rounded-lg bg-gray-900 font-medium text-white flex items-center gap-2">
           <PlusIcon className="h-4 w-4" />
-          New Service
+          New Service Group
         </Link>
       </div>
 
@@ -120,7 +122,7 @@ export default function ServiceLists() {
           <div className="relative flex items-center mb-4">
             <Search className="w-4 h-4 focus-visible:outline-0 focus-visible:shadow-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-700" />
             <Input
-              placeholder="Search for services"
+              placeholder="Search for service group name"
               className="pl-10 pr-4 h-11 py-3 md:text-[16px] text-[16px] bg-gray-50 border-0"
               onChange={e => setSearchQuery(e.target.value)}
             />
@@ -131,19 +133,10 @@ export default function ServiceLists() {
               <thead>
               <tr className="bg-[#FCFCFC]">
                 <th className="text-left py-3 px-6 text-xs font-medium rounded-l-lg text-gray-500">
-                  Service Name
+                  Sevice Group
                 </th>
                 <th className="text-left py-3 px-6 text-xs font-medium text-gray-500">
-                  <div className="flex items-center gap-1">
-                    Price
-                    <CircleQuestionMark className="w-4 h-4 text-gray-400" />
-                  </div>
-                </th>
-                <th className="text-left py-3 px-6 text-xs font-medium text-gray-500">
-                  Duration
-                </th>
-                <th className="text-left py-3 px-6 text-xs font-medium text-gray-500">
-                  Assigned To
+                  Services included
                 </th>
                 <th className="w-12 rounded-r-lg"></th>
               </tr>
@@ -151,10 +144,10 @@ export default function ServiceLists() {
               <tbody>
                 {loading ? (
                   Array.from({ length: 10 }).map((_, i) => (
-                    <CompanyServiceSkeleton key={i} />
+                    <ServiceGroupSkeleton key={i} />
                   ))
                 ) : filteredData.map((service, index) => (
-                  <CompanyServiceItem 
+                  <ServiceGroupItem 
                     key={service.Id} 
                     service={service} 
                     index={index} 
