@@ -57,7 +57,7 @@ export async function listApprovedUserCredits(
     const cookieStore = await cookies();
     const cookie = cookieStore.get('xyzCompAuthorize');
     const allCookies = cookieStore.getAll();
-
+    
     // Use console.error to make it more visible in server logs
     console.error('🍪 ===== COOKIE CHECK FOR APPROVED USER CREDITS =====');
     console.error('🍪 Cookie Check for ApprovedUserCredits:', {
@@ -69,10 +69,10 @@ export async function listApprovedUserCredits(
       cookieCount: allCookies.length
     });
     console.error('🍪 ===================================================');
-
+    
     // Let axios-server handle cookie authentication (same as getCurrentUserAction)
     const queryParams = new URLSearchParams()
-
+    
     if (params.PageNumber) queryParams.append('PageNumber', params.PageNumber.toString())
     if (params.PageSize) queryParams.append('PageSize', params.PageSize.toString())
     if (params.UserId) queryParams.append('UserId', params.UserId.toString())
@@ -81,11 +81,11 @@ export async function listApprovedUserCredits(
     if (params.SearchTerm) queryParams.append('SearchTerm', params.SearchTerm)
 
     const url = `/ApprovedUserCredits/List${queryParams.toString() ? '?' + queryParams.toString() : ''}`
-
+    
     // CRITICAL: Use dev environment if configured (same as service requests)
     const devUrl = getDevApiUrl();
     const isUsingDev = isUsingDevEnvironment();
-
+    
     // CRITICAL: Require dev environment - do NOT fall back to production
     if (!isUsingDev || !devUrl) {
       const errorMsg = 'Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.';
@@ -97,9 +97,9 @@ export async function listApprovedUserCredits(
       });
       throw new Error(errorMsg);
     }
-
+    
     const baseURL = devUrl.replace(/\/+$/, ''); // Remove trailing slash
-
+    
     // Diagnostic logging to verify environment variables
     console.warn('🔍 ApprovedUserCredits API Request - ENVIRONMENT CHECK:', {
       environment: 'DEV',
@@ -115,7 +115,7 @@ export async function listApprovedUserCredits(
       cookieStatus: cookie ? 'found' : 'missing',
       reason: 'Using same environment as service requests to ensure data consistency'
     })
-
+    
     // Use dev environment (already verified above)
     let response: any;
     try {
@@ -124,16 +124,16 @@ export async function listApprovedUserCredits(
         url,
         fullUrl: `${devUrl}${url}`
       });
-
+      
       const serviceRequestsAPI = await createServiceRequestsAxios();
-
+      
       console.warn('✅ Axios instance created, making GET request...', {
         url,
         baseURL: devUrl
       });
-
+      
       response = await serviceRequestsAPI.get(url);
-
+      
       console.warn('✅ API call successful:', {
         url,
         baseURL: devUrl,
@@ -145,84 +145,84 @@ export async function listApprovedUserCredits(
         backend: 'DEV (gw5cndev.geowise.ai) ✅'
       });
     } catch (devErr: any) {
-      // Enhanced error logging for dev environment
-      const noResponse = !devErr.response;
-      const hasRequest = !!devErr.request;
-      const isNetworkError = devErr.code === 'ERR_NETWORK' || devErr.message === 'Network Error' ||
-        devErr.message?.includes('Network') || devErr.code === 'ECONNREFUSED';
-      const isTimeout = devErr.code === 'ECONNABORTED' || devErr.message?.includes('timeout');
-
-      // Log full error details
-      console.error('❌ Dev environment API call failed - FULL ERROR DETAILS:', {
-        url,
-        baseURL: devUrl,
-        fullUrl: `${devUrl}${url}`,
-        errorCode: devErr.code,
-        errorMessage: devErr.message,
-        errorName: devErr.name,
-        errorStack: devErr.stack?.substring(0, 500),
-        hasResponse: !!devErr.response,
-        hasRequest: !!devErr.request,
-        responseStatus: devErr.response?.status,
-        responseStatusText: devErr.response?.statusText,
-        responseData: devErr.response?.data ? (typeof devErr.response.data === 'string'
-          ? devErr.response.data.substring(0, 500)
-          : JSON.stringify(devErr.response.data).substring(0, 500)) : 'none',
-        requestConfig: devErr.config ? {
-          method: devErr.config.method,
-          url: devErr.config.url,
-          baseURL: devErr.config.baseURL,
-          headers: devErr.config.headers
-        } : 'none',
-        isNetworkError,
-        isTimeout,
-        noResponse
-      });
-
-      // Check if error is HTML response (from interceptor)
-      const isHtmlError = devErr.message?.includes('HTML instead of JSON') ||
-        (devErr.response?.data && typeof devErr.response.data === 'string' &&
-          (devErr.response.data.includes('<html') || devErr.response.data.includes('<!DOCTYPE')));
-
-      // Dev backend failed - do NOT fallback to production
-      // This ensures we only use dev environment for testing
-      let errorMessage: string;
-      if (isHtmlError) {
-        // Extract more details from the error message
-        const htmlHint = devErr.message?.includes(':') ? devErr.message.split(':').slice(1).join(':').trim() : '';
-        errorMessage = `Backend returned HTML instead of JSON. ${htmlHint || 'This usually indicates: 1) Authentication failed (cookie invalid/expired), 2) Endpoint not found, or 3) Server error. Please check server logs for the full HTML response.'}`;
-      } else if (isNetworkError) {
-        errorMessage = `Cannot connect to dev backend (${devUrl}). Please verify the backend is running and accessible.`;
-      } else if (isTimeout) {
-        errorMessage = `Request timeout: The dev backend (${devUrl}) took too long to respond.`;
-      } else {
-        errorMessage = `Dev backend error: ${devErr.message || 'Unknown error'}`;
-      }
-
-      console.error('❌ Dev backend unavailable - NOT falling back to production:', {
-        devUrl,
-        fullUrl: `${devUrl}${url}`,
-        reason: 'Production fallback disabled to ensure dev-only testing',
-        errorCode: devErr.code,
-        errorMessage: devErr.message,
-        isNetworkError,
-        isTimeout,
-        action: 'Please ensure dev backend is running and accessible',
-        envCheck: {
-          NEXT_PUBLIC_DEV_API_URL: process.env.NEXT_PUBLIC_DEV_API_URL || 'not set',
-          NEXT_PUBLIC_SERVICE_REQUESTS_API_URL: process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
-          resolvedDevUrl: devUrl
+        // Enhanced error logging for dev environment
+        const noResponse = !devErr.response;
+        const hasRequest = !!devErr.request;
+        const isNetworkError = devErr.code === 'ERR_NETWORK' || devErr.message === 'Network Error' || 
+                               devErr.message?.includes('Network') || devErr.code === 'ECONNREFUSED';
+        const isTimeout = devErr.code === 'ECONNABORTED' || devErr.message?.includes('timeout');
+        
+        // Log full error details
+        console.error('❌ Dev environment API call failed - FULL ERROR DETAILS:', {
+          url,
+          baseURL: devUrl,
+          fullUrl: `${devUrl}${url}`,
+          errorCode: devErr.code,
+          errorMessage: devErr.message,
+          errorName: devErr.name,
+          errorStack: devErr.stack?.substring(0, 500),
+          hasResponse: !!devErr.response,
+          hasRequest: !!devErr.request,
+          responseStatus: devErr.response?.status,
+          responseStatusText: devErr.response?.statusText,
+          responseData: devErr.response?.data ? (typeof devErr.response.data === 'string' 
+            ? devErr.response.data.substring(0, 500) 
+            : JSON.stringify(devErr.response.data).substring(0, 500)) : 'none',
+          requestConfig: devErr.config ? {
+            method: devErr.config.method,
+            url: devErr.config.url,
+            baseURL: devErr.config.baseURL,
+            headers: devErr.config.headers
+          } : 'none',
+          isNetworkError,
+          isTimeout,
+          noResponse
+        });
+        
+        // Check if error is HTML response (from interceptor)
+        const isHtmlError = devErr.message?.includes('HTML instead of JSON') || 
+                            (devErr.response?.data && typeof devErr.response.data === 'string' && 
+                             (devErr.response.data.includes('<html') || devErr.response.data.includes('<!DOCTYPE')));
+        
+        // Dev backend failed - do NOT fallback to production
+        // This ensures we only use dev environment for testing
+        let errorMessage: string;
+        if (isHtmlError) {
+          // Extract more details from the error message
+          const htmlHint = devErr.message?.includes(':') ? devErr.message.split(':').slice(1).join(':').trim() : '';
+          errorMessage = `Backend returned HTML instead of JSON. ${htmlHint || 'This usually indicates: 1) Authentication failed (cookie invalid/expired), 2) Endpoint not found, or 3) Server error. Please check server logs for the full HTML response.'}`;
+        } else if (isNetworkError) {
+          errorMessage = `Cannot connect to dev backend (${devUrl}). Please verify the backend is running and accessible.`;
+        } else if (isTimeout) {
+          errorMessage = `Request timeout: The dev backend (${devUrl}) took too long to respond.`;
+        } else {
+          errorMessage = `Dev backend error: ${devErr.message || 'Unknown error'}`;
         }
-      });
-
-      // Return error response instead of throwing
-      return {
-        Status: 500,
-        Message: errorMessage,
-        data: []
-      };
+        
+        console.error('❌ Dev backend unavailable - NOT falling back to production:', {
+          devUrl,
+          fullUrl: `${devUrl}${url}`,
+          reason: 'Production fallback disabled to ensure dev-only testing',
+          errorCode: devErr.code,
+          errorMessage: devErr.message,
+          isNetworkError,
+          isTimeout,
+          action: 'Please ensure dev backend is running and accessible',
+          envCheck: {
+            NEXT_PUBLIC_DEV_API_URL: process.env.NEXT_PUBLIC_DEV_API_URL || 'not set',
+            NEXT_PUBLIC_SERVICE_REQUESTS_API_URL: process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
+            resolvedDevUrl: devUrl
+          }
+        });
+        
+        // Return error response instead of throwing
+        return { 
+          Status: 500, 
+          Message: errorMessage, 
+          data: [] 
+        };
     }
-
+    
     // Log the response type and first 500 chars for debugging
     let responsePreview = 'N/A';
     if (response !== undefined && response !== null) {
@@ -237,7 +237,7 @@ export async function listApprovedUserCredits(
         }
       }
     }
-
+    
     console.log('ApprovedUserCredits API Response:', {
       type: typeof response,
       isArray: Array.isArray(response),
@@ -246,12 +246,12 @@ export async function listApprovedUserCredits(
       hasObject: response?.Object !== undefined,
       preview: responsePreview
     })
-
+    
     // Handle null or undefined response
     if (!response) {
       return { Status: 500, Message: 'Empty response from server', data: [] }
     }
-
+    
     // Handle string responses (HTML error pages, plain text errors, etc.)
     if (typeof response === 'string') {
       // Try to parse as JSON first
@@ -259,13 +259,13 @@ export async function listApprovedUserCredits(
         const parsed = JSON.parse(response)
         // If it's a valid JSON object with Status, use it
         if (parsed.Status) {
-          let message = parsed.Message ||
+          let message = parsed.Message || 
             (parsed.Status === 401 ? 'Unauthorized. Please check your authentication.' :
-              parsed.Status === 403 ? 'Forbidden. You do not have permission to access this resource.' :
-                parsed.Status === 404 ? 'Endpoint not found.' :
-                  parsed.Status === 500 ? 'Internal server error.' :
-                    'Request failed')
-
+             parsed.Status === 403 ? 'Forbidden. You do not have permission to access this resource.' :
+             parsed.Status === 404 ? 'Endpoint not found.' :
+             parsed.Status === 500 ? 'Internal server error.' :
+             'Request failed')
+          
           // Check if it's a database/command execution error
           if (parsed.Message && (
             parsed.Message.includes('executing the command definition') ||
@@ -274,7 +274,7 @@ export async function listApprovedUserCredits(
             message = 'Backend database error: ' + parsed.Message + ' The API endpoint is having trouble querying the database. Please contact the backend team.'
             console.error('ApprovedUserCredits: Backend database error (not authentication):', parsed.Message)
           }
-
+          
           return { Status: parsed.Status, Message: message, data: [] }
         }
       } catch {
@@ -282,16 +282,16 @@ export async function listApprovedUserCredits(
         // Check if it looks like HTML (redirect to login page or error page)
         if (response.includes('<html') || response.includes('<!DOCTYPE') || response.includes('login') || response.includes('Login')) {
           console.warn('Server redirected to login page - cookie may be invalid or expired')
-          return {
-            Status: 401,
-            Message: 'Authentication required. Your session may have expired. Please log in again.',
-            data: []
+          return { 
+            Status: 401, 
+            Message: 'Authentication required. Your session may have expired. Please log in again.', 
+            data: [] 
           }
         }
         return { Status: 500, Message: `Server returned an error: ${response.substring(0, 200)}`, data: [] }
       }
     }
-
+    
     // Handle different response formats
     if (Array.isArray(response)) {
       return { Status: 201, data: response }
@@ -306,26 +306,26 @@ export async function listApprovedUserCredits(
       // Handle if response has Status and Object
       const data = Array.isArray(response.Object) ? response.Object : []
       return { Status: 201, data }
-    } else if (response.Status && response.Status !== 201) {
-      // Handle error response with Status field (401, 403, 500, etc.)
-      let message = response.Message ||
-        (response.Status === 401 ? 'Unauthorized. Please check your authentication.' :
-          response.Status === 403 ? 'Forbidden. You do not have permission to access this resource.' :
-            response.Status === 404 ? 'Endpoint not found.' :
-              response.Status === 500 ? 'Internal server error.' :
-                'Request failed')
-
-      // Check if it's a database/command execution error (backend database issue, not auth)
-      if (response.Message && (
-        response.Message.includes('executing the command definition') ||
-        response.Message.includes('Error retrieving ApprovedUserCredits')
-      )) {
-        message = 'Backend database error: ' + response.Message + ' The API endpoint is having trouble querying the database. Please contact the backend team.'
-        // Log this as a backend issue, not auth
-        console.error('ApprovedUserCredits: Backend database error (not authentication):', response.Message)
-      }
-
-      return { Status: response.Status, Message: message, data: [] }
+             } else if (response.Status && response.Status !== 201) {
+               // Handle error response with Status field (401, 403, 500, etc.)
+               let message = response.Message || 
+                 (response.Status === 401 ? 'Unauthorized. Please check your authentication.' :
+                  response.Status === 403 ? 'Forbidden. You do not have permission to access this resource.' :
+                  response.Status === 404 ? 'Endpoint not found.' :
+                  response.Status === 500 ? 'Internal server error.' :
+                  'Request failed')
+               
+               // Check if it's a database/command execution error (backend database issue, not auth)
+               if (response.Message && (
+                 response.Message.includes('executing the command definition') ||
+                 response.Message.includes('Error retrieving ApprovedUserCredits')
+               )) {
+                 message = 'Backend database error: ' + response.Message + ' The API endpoint is having trouble querying the database. Please contact the backend team.'
+                 // Log this as a backend issue, not auth
+                 console.error('ApprovedUserCredits: Backend database error (not authentication):', response.Message)
+               }
+               
+               return { Status: response.Status, Message: message, data: [] }
     } else {
       // Unknown response format - log for debugging
       // Safely stringify response for logging
@@ -361,7 +361,7 @@ export async function listApprovedUserCredits(
         }
       }
     }
-
+    
     console.error('ApprovedUserCredits API Error:', {
       message: err.message,
       code: err.code,
@@ -372,12 +372,12 @@ export async function listApprovedUserCredits(
       requestBaseURL: err.config?.baseURL,
       fullUrl: err.config ? `${err.config.baseURL}${err.config.url}` : 'unknown'
     })
-
+    
     // Handle axios errors - check if it's a response error
     if (err.response) {
       const status = err.response.status || 500
       const responseData = err.response.data
-
+      
       // If response is HTML, provide more context
       if (typeof responseData === 'string' && (responseData.includes('<html') || responseData.includes('<!DOCTYPE'))) {
         console.error('Server returned HTML error page. This usually means:', {
@@ -392,22 +392,22 @@ export async function listApprovedUserCredits(
           requestedPath: err.config?.url || 'unknown'
         })
       }
-
-      const message = responseData?.Message || responseData?.message || responseData?.error || err.response.statusText ||
+      
+      const message = responseData?.Message || responseData?.message || responseData?.error || err.response.statusText || 
         (status === 401 ? 'Unauthorized. Please check your authentication.' :
-          status === 403 ? 'Forbidden. You do not have permission to access this resource.' :
-            status === 404 ? 'Endpoint not found. Please verify the API endpoint is deployed.' :
-              status === 500 ? 'Internal server error.' :
-                'Request failed')
+         status === 403 ? 'Forbidden. You do not have permission to access this resource.' :
+         status === 404 ? 'Endpoint not found. Please verify the API endpoint is deployed.' :
+         status === 500 ? 'Internal server error.' :
+         'Request failed')
       return { Status: status, Message: message, data: [] }
     }
     // Handle axios errors without response (network errors, CORS, etc.)
     if (err.request && !err.response) {
-      const isUsingDev = isUsingDevEnvironment();
-      const devUrl = getDevApiUrl();
+    const isUsingDev = isUsingDevEnvironment();
+    const devUrl = getDevApiUrl();
       const isNetworkError = err.code === 'ERR_NETWORK' || err.message === 'Network Error';
       const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout');
-
+      
       console.error('Network error - no response received:', {
         message: err.message,
         code: err.code,
@@ -423,14 +423,14 @@ export async function listApprovedUserCredits(
           'Firewall blocking the request'
         ]
       });
-
+      
       let errorMessage = 'Network error. Please check your connection.';
       if (isUsingDev && devUrl) {
         errorMessage = `Cannot connect to dev backend (${devUrl}). Please verify the backend is running and accessible.`;
       } else if (isTimeout) {
         errorMessage = 'Request timed out. The backend may be slow or unresponsive.';
       }
-
+      
       return { Status: 500, Message: errorMessage, data: [] }
     }
     // Handle other errors
@@ -449,7 +449,7 @@ export async function getApprovedUserCreditsByUserId(): Promise<{ Status: number
     }
     const serviceRequestsAPI = await createServiceRequestsAxios();
     const response: any = await serviceRequestsAPI.get('/ApprovedUserCredits/GetByUserId')
-
+    
     if (Array.isArray(response)) {
       return { Status: 201, data: response }
     } else if (response.data && Array.isArray(response.data)) {
@@ -480,7 +480,7 @@ export async function createApprovedUserCredit(
     const isUsingDev = isUsingDevEnvironment();
     const devUrl = getDevApiUrl();
     const baseURL = devUrl || 'unknown';
-
+    
     console.warn('🔍 Creating ApprovedUserCredit:', {
       environment: 'DEV',
       apiUrl: baseURL,
@@ -494,23 +494,23 @@ export async function createApprovedUserCredit(
       },
       reason: 'Using same environment as service requests to ensure data consistency'
     });
-
+    
     if (!isUsingDev) {
       throw new Error('Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL');
     }
     const serviceRequestsAPI = await createServiceRequestsAxios();
     const response: any = await serviceRequestsAPI.post('/ApprovedUserCredits/add', data);
-
+    
     if (response.Status === 201) {
       console.log('✅ ApprovedUserCredit created successfully in DEV');
-      return {
-        Status: 201,
+      return { 
+        Status: 201, 
         Message: response.Message || 'ApprovedUserCredit created successfully',
         data: response.Object || response.data || response
       }
     } else {
-      return {
-        Status: response.Status || 500,
+      return { 
+        Status: response.Status || 500, 
         Message: response.Message || 'Failed to create ApprovedUserCredit'
       }
     }
@@ -539,7 +539,7 @@ export async function updateApprovedUserCredit(
     const isUsingDev = isUsingDevEnvironment();
     const devUrl = getDevApiUrl();
     const baseURL = devUrl || 'unknown';
-
+    
     console.warn('🔍 Updating ApprovedUserCredit:', {
       environment: 'DEV',
       apiUrl: baseURL,
@@ -554,23 +554,23 @@ export async function updateApprovedUserCredit(
       },
       reason: 'Using same environment as service requests to ensure data consistency'
     });
-
+    
     if (!isUsingDev) {
       throw new Error('Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL');
     }
     const serviceRequestsAPI = await createServiceRequestsAxios();
     const response: any = await serviceRequestsAPI.post('/ApprovedUserCredits/Update', data);
-
+    
     if (response.Status === 201) {
       console.log('✅ ApprovedUserCredit updated successfully in', isUsingDev ? 'DEV' : 'PRODUCTION');
-      return {
-        Status: 201,
+      return { 
+        Status: 201, 
         Message: response.Message || 'ApprovedUserCredit updated successfully',
         data: response.Object || response.data || response
       }
     } else {
-      return {
-        Status: response.Status || 500,
+      return { 
+        Status: response.Status || 500, 
         Message: response.Message || 'Failed to update ApprovedUserCredit'
       }
     }
@@ -597,7 +597,7 @@ export async function deleteApprovedUserCredit(
     // Use dev environment if configured (same as listApprovedUserCredits)
     const isUsingDev = isUsingDevEnvironment();
     const devUrl = getDevApiUrl();
-
+    
     console.warn('🔍 Deleting ApprovedUserCredit:', {
       environment: isUsingDev ? 'DEV' : 'PRODUCTION',
       apiUrl: devUrl || 'unknown',
@@ -608,21 +608,21 @@ export async function deleteApprovedUserCredit(
         NEXT_PUBLIC_SERVICE_REQUESTS_API_URL: process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
       }
     });
-
+    
     if (!isUsingDev) {
       throw new Error('Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL');
     }
     const serviceRequestsAPI = await createServiceRequestsAxios();
     const response: any = await serviceRequestsAPI.post(`/ApprovedUserCredits/Delete?id=${id}`);
-
+    
     if (response.Status === 201) {
-      return {
-        Status: 201,
+      return { 
+        Status: 201, 
         Message: response.Message || 'ApprovedUserCredit deleted successfully'
       }
     } else {
-      return {
-        Status: response.Status || 500,
+      return { 
+        Status: response.Status || 500, 
         Message: response.Message || 'Failed to delete ApprovedUserCredit'
       }
     }
@@ -644,21 +644,21 @@ export async function getApprovedUserCreditById(
   try {
     // Use dev environment if configured
     const isUsingDev = !!process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
-
+    
     if (!isUsingDev) {
       throw new Error('Dev environment not configured. Please set NEXT_PUBLIC_SERVICE_REQUESTS_API_URL');
     }
     const serviceRequestsAPI = await createServiceRequestsAxios();
     const response: any = await serviceRequestsAPI.get(`/ApprovedUserCredits/GetById?id=${id}`);
-
+    
     if (response.Status === 201 || response.Id) {
-      return {
-        Status: 201,
+      return { 
+        Status: 201, 
         data: response.Object || response.data || response
       }
     } else {
-      return {
-        Status: response.Status || 500,
+      return { 
+        Status: response.Status || 500, 
         Message: response.Message || 'ApprovedUserCredit not found'
       }
     }
@@ -694,16 +694,16 @@ export async function importApprovedUserCredits(
         }
       }
     )
-
+    
     if (response.Status === 201) {
-      return {
-        Status: 201,
+      return { 
+        Status: 201, 
         Message: response.Message || 'Import completed successfully',
         data: response.Object || response.data || response
       }
     } else {
-      return {
-        Status: response.Status || 500,
+      return { 
+        Status: response.Status || 500, 
         Message: response.Message || 'Import failed',
         data: response.Object || response.data
       }
@@ -736,24 +736,24 @@ export async function exportApprovedUserCredits(): Promise<{ Status: number; Mes
         }
       }
     )
-
+    
     // If response is already a Blob or ArrayBuffer, return it
     if (response instanceof Blob) {
       return { Status: 201, blob: response }
     }
-
+    
     if (response instanceof ArrayBuffer) {
       return { Status: 201, blob: new Blob([response]) }
     }
-
+    
     // Handle JSON response (error case)
     if (response.Status && response.Status !== 201) {
-      return {
-        Status: response.Status || 500,
+      return { 
+        Status: response.Status || 500, 
         Message: response.Message || 'Export failed'
       }
     }
-
+    
     // Default: treat as successful blob
     return { Status: 201, blob: new Blob([response]) }
   } catch (err: any) {
@@ -777,97 +777,466 @@ export async function exportApprovedUserCredits(): Promise<{ Status: number; Mes
  * 
  * @returns Response with Status, Message, and data containing success/error counts
  */
-export async function generateBookings(creditIds: number[]): Promise<{
-  Status: number;
-  Message: string;
-  data?: any;
-  ErrorLogs?: string[];
+export async function generateBookings(
+  creditIds: number[]
+): Promise<{ 
+  Status: number; 
+  Message?: string; 
+  data?: { 
+    success?: number; 
+    errors?: string[];
+    totalProcessed?: number;
+    bookingsCreated?: number;
+    ErrorLogs?: string[];
+  } 
 }> {
-  const requestStartTime = Date.now()
-
   try {
     if (!creditIds || creditIds.length === 0) {
-      return {
-        Status: 400,
-        Message: 'At least one credit ID is required'
+      return { 
+        Status: 400, 
+        Message: 'At least one credit ID is required' 
       }
     }
 
     console.log('Calling GenerateBookings API (Auto-Dispatch) with credit IDs:', creditIds)
-
-    // Use service requests axios instance (supports dev environment)
-    // The axios instance will read cookies fresh and add them to the request
-    const serviceRequestsAPI = await createServiceRequestsAxios()
-
-    // Add 10-minute timeout for booking generation
-    const axiosResponse = await serviceRequestsAPI.post('/ApprovedUserCredits/GenerateBookings', creditIds, {
-      timeout: 600000,
-      headers: {
-        'TimeZone': Intl.DateTimeFormat().resolvedOptions().timeZone,
-        'DeviceToken': 'test12345',
-        'IsTest': 'true'
-      }
-    })
-
-    const response = axiosResponse as any
-    const duration = Date.now() - requestStartTime
-    console.log(`✅ GenerateBookings API call completed in ${(duration / 1000).toFixed(1)}s`, response)
-
-    // Normalize response structure
-    const responseStatus = response.Status || response.status || (response.success ? 201 : 500)
-    const responseMessage = response.Message || response.message || (response.success ? 'Bookings generated successfully' : 'Failed to generate bookings')
-
-    // CRITICAL: Avoid returning huge data objects which can crash Server Actions (Next.js body limit)
-    // Instead of returning all created bookings, return a summary/count
-    let responseDataSummary = null;
-    const rawData = response.Object || response.data || response;
-
-    if (Array.isArray(rawData)) {
-      responseDataSummary = {
-        bookingsCreated: rawData.length,
-        message: `Successfully created ${rawData.length} bookings`,
-        preview: rawData.slice(0, 3) // Only return first 3 for context
-      };
-    } else if (rawData && typeof rawData === 'object') {
-      responseDataSummary = {
-        ...rawData,
-        // If there's a huge list in the object, truncate it
-        Bookings: Array.isArray(rawData.Bookings) ? `[${rawData.Bookings.length} bookings]` : rawData.Bookings,
-        bookings: Array.isArray(rawData.bookings) ? `[${rawData.bookings.length} bookings]` : rawData.bookings
-      };
-    }
-
-    return {
-      Status: responseStatus,
-      Message: responseMessage,
-      data: responseDataSummary || rawData, // Fallback to raw data if small/unknown
-      ErrorLogs: response.ErrorLogs
-    }
-  } catch (error: any) {
-    const duration = Date.now() - requestStartTime
-    console.error(`❌ GenerateBookings API call failed after ${(duration / 1000).toFixed(1)}s:`, error.message)
-
-    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-      return {
-        Status: 504,
-        Message: `Request timed out after 600 seconds (10 minutes). The backend may still be processing.`,
-        data: undefined
-      }
-    }
-
-    if (error.response?.status === 401) {
-      console.error('❌ Authentication failed for GenerateBookings');
+    
+    // CRITICAL: Check authentication cookie before making request
+    const { cookies } = await import('next/headers');
+    let cookieStore;
+    let authCookie;
+    let allCookies;
+    
+    try {
+      cookieStore = await cookies();
+      authCookie = cookieStore.get('xyzCompAuthorize');
+      allCookies = cookieStore.getAll();
+    } catch (cookieError: any) {
+      const errorMsg = 'Failed to read authentication cookie. Please log out and log back in.';
+      console.error('❌ GenerateBookings: Error reading cookies:', {
+        error: cookieError.message,
+        errorName: cookieError.name,
+        action: 'User needs to log in again'
+      });
       return {
         Status: 401,
-        Message: 'Authentication failed. Please log out and log back in, then try again.',
+        Message: errorMsg,
+        data: undefined
+      };
+    }
+    
+    if (!authCookie || !authCookie.value) {
+      const errorMsg = 'Authentication required. Please log out and log back in. Your session may have expired.';
+      console.error('❌ GenerateBookings: Authentication cookie missing:', {
+        hasCookie: !!authCookie,
+        hasValue: !!authCookie?.value,
+        allCookies: allCookies.map(c => ({ name: c.name, hasValue: !!c.value, valueLength: c.value?.length || 0 })),
+        cookieCount: allCookies.length,
+        cookieNames: allCookies.map(c => c.name),
+        action: 'User needs to log out and log back in'
+      });
+      return {
+        Status: 401,
+        Message: errorMsg,
+        data: undefined
+      };
+    }
+    
+    // Validate cookie value is not empty or just whitespace
+    if (!authCookie.value.trim()) {
+      const errorMsg = 'Authentication cookie is empty. Please log out and log back in.';
+      console.error('❌ GenerateBookings: Authentication cookie is empty:', {
+        cookieLength: authCookie.value.length,
+        allCookies: allCookies.map(c => ({ name: c.name, hasValue: !!c.value })),
+        action: 'User needs to log out and log back in'
+      });
+      return {
+        Status: 401,
+        Message: errorMsg,
+        data: undefined
+      };
+    }
+    
+    // Validate cookie format (should be a non-empty string)
+    if (authCookie.value.length < 10) {
+      const errorMsg = 'Authentication cookie appears invalid. Please log out and log back in.';
+      console.error('❌ GenerateBookings: Cookie seems too short (possibly invalid):', {
+        cookieLength: authCookie.value.length,
+        cookiePreview: authCookie.value.substring(0, 20),
+        action: 'User needs to log out and log back in'
+      });
+      return {
+        Status: 401,
+        Message: errorMsg,
+        data: undefined
+      };
+    }
+    
+    console.log('✅ GenerateBookings: Authentication cookie validated:', {
+      hasCookie: !!authCookie,
+      hasValue: !!authCookie.value,
+      cookieLength: authCookie.value?.length || 0,
+      cookiePreview: authCookie.value ? `${authCookie.value.substring(0, 30)}...` : 'none',
+      allCookiesCount: allCookies.length,
+      cookieNames: allCookies.map(c => c.name)
+    });
+    
+    // Use service requests axios instance (supports dev environment)
+    // This ensures auto-dispatch uses the same dev environment as service requests import
+    // The axios instance will read cookies fresh and add them to the request
+    const serviceRequestsAPI = await createServiceRequestsAxios()
+    
+    // Verify the axios instance will have the cookie
+    // Double-check cookie is still available right before making the request
+    const cookieStoreBeforeRequest = await cookies();
+    const authCookieBeforeRequest = cookieStoreBeforeRequest.get('xyzCompAuthorize');
+    if (!authCookieBeforeRequest || !authCookieBeforeRequest.value) {
+      const errorMsg = 'Authentication cookie lost before request. Please log in again.';
+      console.error('❌ GenerateBookings: Cookie disappeared before request:', {
+        hadCookie: !!authCookie,
+        hasCookieNow: !!authCookieBeforeRequest,
+        action: 'User needs to log in again - possible session expiration'
+      });
+      return {
+        Status: 401,
+        Message: errorMsg,
+        data: undefined
+      };
+    }
+    const isUsingDev = !!process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL
+    console.log('🔧 Auto-Dispatch using Service Requests API URL (dev environment if configured)')
+    
+    // CRITICAL: Log where bookings will be created
+    // Note: Dev environment is for testing, but data should be treated as REAL (realistic locations, real data structure)
+    console.warn('⚠️ AUTO-DISPATCH DATA STORAGE LOCATION:', {
+      environment: 'DEV (Testing Environment)',
+      message: '✅ Bookings will be created on DEV environment (testing database, but data is REAL and realistic)',
+      devUrl: getDevApiUrl() || 'not set',
+      note: 'Dev environment uses separate database for testing, but data structure and locations are realistic'
+    })
+    
+    // Add timeout to prevent hanging (120 seconds for booking generation - backend may need more time)
+    const requestStartTime = Date.now()
+    let response: any
+    
+    // Log exactly what we're sending to the backend
+    console.log('📤 GenerateBookings Request Details:', {
+      creditIdsCount: creditIds.length,
+      creditIds: creditIds,
+      endpoint: '/ApprovedUserCredits/GenerateBookings',
+      timeout: '120 seconds',
+      backendUrl: getDevApiUrl() || 'unknown',
+      purpose: 'Converting pending service requests to bookings via auto-dispatch',
+      note: creditIds.length > 10 
+        ? '⚠️ Processing many credit IDs - this may take longer' 
+        : creditIds.length === 1
+        ? '✅ Processing single credit ID - should complete quickly'
+        : '✅ Processing reasonable number of credit IDs',
+      important: 'This endpoint should ONLY be called when user explicitly runs auto-dispatch. Import should NOT trigger this.'
+    })
+    
+    // Warn if single credit ID might timeout (indicates backend issue)
+    if (creditIds.length === 1) {
+      console.warn('⚠️ Processing single credit ID - if this times out, it indicates a backend performance issue, not a frontend problem.')
+    }
+    
+    try {
+      response = await Promise.race([
+        serviceRequestsAPI.post('/ApprovedUserCredits/GenerateBookings', {
+          CreditIds: creditIds
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout after 120 seconds')), 120000)
+        )
+      ]) as any
+      
+      const requestDuration = Date.now() - requestStartTime
+      console.log(`✅ GenerateBookings API request completed in ${requestDuration}ms (${(requestDuration / 1000).toFixed(1)}s)`)
+      
+      // Warn if request took a long time
+      if (requestDuration > 90000) {
+        console.warn('⚠️ GenerateBookings took longer than 90 seconds. Consider optimizing backend processing or reducing credit IDs.')
+      }
+      
+      // Log full response structure for debugging
+      // Check if response is an object before using 'in' operator
+      const isResponseObject = response && typeof response === 'object' && !Array.isArray(response)
+      
+      // Safely stringify response for logging
+      let responseStr = 'N/A';
+      if (response !== undefined && response !== null) {
+        try {
+          const stringified = JSON.stringify(response, null, 2);
+          responseStr = stringified || 'Unable to stringify';
+        } catch {
+          responseStr = 'Unable to parse response';
+        }
+      }
+      console.log('📥 GenerateBookings API response (full):', responseStr)
+      
+      // Safely get response value preview
+      let responseValuePreview = 'N/A';
+      if (response !== undefined && response !== null) {
+        if (typeof response === 'string') {
+          responseValuePreview = response.substring(0, 200);
+        } else if (isResponseObject) {
+          responseValuePreview = 'object';
+        } else {
+          try {
+            responseValuePreview = String(response);
+          } catch {
+            responseValuePreview = 'Unable to convert to string';
+          }
+        }
+      }
+      
+      console.log('📥 GenerateBookings API response (summary):', {
+        responseType: typeof response,
+        isObject: isResponseObject,
+        isArray: Array.isArray(response),
+        isNull: response === null,
+        isUndefined: response === undefined,
+        Status: isResponseObject ? response.Status : undefined,
+        status: isResponseObject ? response.status : undefined,
+        Message: isResponseObject ? response.Message : undefined,
+        message: isResponseObject ? response.message : undefined,
+        hasData: isResponseObject ? !!response.data : false,
+        hasObject: isResponseObject ? !!response.Object : false,
+        dataType: isResponseObject ? typeof response.data : typeof response,
+        objectType: isResponseObject ? typeof response.Object : 'N/A',
+        responseKeys: isResponseObject ? Object.keys(response) : [],
+        responseValue: responseValuePreview,
+        responseStructure: {
+          hasStatus: isResponseObject ? ('Status' in response || 'status' in response) : false,
+          hasMessage: isResponseObject ? ('Message' in response || 'message' in response) : false,
+          hasData: isResponseObject ? ('data' in response) : false,
+          hasObject: isResponseObject ? ('Object' in response) : false
+        }
+      })
+    } catch (requestError: any) {
+      const requestDuration = Date.now() - requestStartTime
+      console.error(`❌ GenerateBookings API request failed after ${requestDuration}ms`)
+      throw requestError // Re-throw to be caught by outer catch block
+    }
+    
+    // Handle different response formats
+    // Backend might return: { Status: 201, Message: "...", Object: {...} }
+    // Or: { status: 201, message: "...", data: {...} }
+    // Or: { success: true, data: {...} }
+    // Or: string, null, undefined (error cases)
+    const isResponseObject = response && typeof response === 'object' && !Array.isArray(response)
+    
+    if (!isResponseObject) {
+      // Response is not an object (string, null, undefined, etc.)
+      // Safely convert response to string for logging
+      let responseValueStr = 'N/A';
+      if (response !== undefined && response !== null) {
+        if (typeof response === 'string') {
+          responseValueStr = response.substring(0, 500);
+        } else {
+          try {
+            responseValueStr = String(response);
+          } catch {
+            responseValueStr = 'Unable to convert to string';
+          }
+        }
+      }
+      
+      console.error('❌ GenerateBookings API returned non-object response:', {
+        responseType: typeof response,
+        responseValue: responseValueStr,
+        note: 'Backend may have returned an error message as a string or empty response'
+      })
+      
+      return {
+        Status: 500,
+        Message: typeof response === 'string' ? response : 'Backend returned an invalid response format',
         data: undefined
       }
     }
-
-    return {
-      Status: error.response?.status || 500,
-      Message: error.response?.data?.Message || error.message || 'An error occurred during booking generation',
-      data: error.response?.data
+    
+    const responseStatus = response.Status || response.status || (response.success ? 201 : 500)
+    const responseMessage = response.Message || response.message || (response.success ? 'Bookings generated successfully' : 'Failed to generate bookings')
+    const responseData = response.Object || response.data || response
+    
+    console.log('📊 Processing GenerateBookings response:', {
+      responseStatus,
+      responseMessage,
+      hasData: !!responseData,
+      dataType: typeof responseData,
+      isSuccess: responseStatus === 201
+    })
+    
+    // Handle 401 Unauthorized in response
+    if (responseStatus === 401) {
+      // Re-check cookie status when 401 occurs in response
+      const cookieStoreOnResponse = await cookies();
+      const authCookieOnResponse = cookieStoreOnResponse.get('xyzCompAuthorize');
+      const allCookiesOnResponse = cookieStoreOnResponse.getAll();
+      
+      // Clean up backend error message - remove redundant "Error : ." prefix
+      let cleanBackendMessage = responseMessage?.trim() || '';
+      if (cleanBackendMessage.startsWith('Error :')) {
+        cleanBackendMessage = cleanBackendMessage.replace(/^Error\s*:\s*\.?\s*/, '').trim();
+      }
+      
+      const authErrorMessage = cleanBackendMessage && cleanBackendMessage !== 'Please contact the helpdesk.'
+        ? `Authentication failed: ${cleanBackendMessage}. Please log out and log back in, then try again.`
+        : 'Authentication failed. Your session may have expired. Please log out and log back in, then try again.';
+      
+      console.error('❌ GenerateBookings: API returned 401 Unauthorized:', {
+        responseStatus,
+        responseMessage,
+        responseData,
+        cookieStatus: {
+          hasCookieNow: !!authCookieOnResponse,
+          cookieValueLength: authCookieOnResponse?.value?.length || 0,
+          allCookies: allCookiesOnResponse.map(c => ({ name: c.name, hasValue: !!c.value, valueLength: c.value?.length || 0 })),
+          cookieCount: allCookiesOnResponse.length
+        },
+        backendMessage: responseMessage,
+        action: 'User should log out and log back in'
+      });
+      return {
+        Status: 401,
+        Message: authErrorMessage,
+        data: responseData
+      };
+    }
+    
+    if (responseStatus === 201 || responseStatus === 200) {
+      return { 
+        Status: 201, 
+        Message: responseMessage,
+        data: responseData
+      }
+    } else {
+      // Even if status is not 201, return the response so the caller can see the error details
+      return { 
+        Status: responseStatus, 
+        Message: responseMessage,
+        data: responseData
+      }
+    }
+  } catch (err: any) {
+    // Enhanced error logging to help debug the issue
+    const baseURL = process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'unknown'
+    const endpoint = '/ApprovedUserCredits/GenerateBookings'
+    const fullUrl = `${baseURL}${endpoint}`
+    
+    console.error('❌ GenerateBookings API Error:', {
+      message: err.message,
+      name: err.name,
+      code: err.code,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      responseData: err.response?.data,
+      requestUrl: fullUrl,
+      baseURL: baseURL,
+      endpoint: endpoint,
+      creditIds: creditIds,
+      isTimeout: err.code === 'ECONNABORTED' || err.message?.includes('timeout'),
+      isNetworkError: err.code === 'ERR_NETWORK' || err.message === 'Network Error',
+      isServerError: err.response?.status >= 500,
+      isClientError: err.response?.status >= 400 && err.response?.status < 500,
+      errorDetails: {
+        stack: err.stack,
+        config: err.config ? {
+          url: err.config.url,
+          method: err.config.method,
+          baseURL: err.config.baseURL,
+          timeout: err.config.timeout
+        } : undefined
+      }
+    })
+    
+    // Provide more specific error messages based on error type
+    let errorMessage = 'Failed to generate bookings'
+    
+    // Handle 401 Unauthorized errors specifically
+    if (err.response?.status === 401) {
+      // Re-check cookie status when 401 occurs
+      const cookieStoreOnError = await cookies();
+      const authCookieOnError = cookieStoreOnError.get('xyzCompAuthorize');
+      const allCookiesOnError = cookieStoreOnError.getAll();
+      
+      errorMessage = 'Authentication failed. Your session may have expired. Please log out and log back in, then try again.';
+      console.error('❌ GenerateBookings: 401 Unauthorized - Authentication failed:', {
+        status: 401,
+        responseData: err.response?.data,
+        responseStatusText: err.response?.statusText,
+        cookieStatus: {
+          hasCookieNow: !!authCookieOnError,
+          cookieValueLength: authCookieOnError?.value?.length || 0,
+          allCookies: allCookiesOnError.map(c => ({ name: c.name, hasValue: !!c.value, valueLength: c.value?.length || 0 })),
+          cookieCount: allCookiesOnError.length
+        },
+        requestDetails: {
+          url: err.config?.url,
+          baseURL: err.config?.baseURL,
+          fullUrl: err.config ? `${err.config.baseURL}${err.config.url}` : 'unknown',
+          method: err.config?.method,
+          headers: err.config?.headers ? Object.keys(err.config.headers) : [],
+          cookieHeader: err.config?.headers?.Cookie ? 'present' : 'missing'
+        },
+        possibleCauses: [
+          'Session expired - user needs to log in again',
+          'Cookie not being sent correctly to backend',
+          'Cookie invalid or corrupted',
+          'Backend authentication service unavailable',
+          'Cookie expired between check and request',
+          'Backend rejecting cookie format'
+        ],
+        action: 'User should log out and log back in, then try again'
+      });
+    } else if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+      // Check if this is a timeout with a single credit ID - indicates backend performance issue
+      const isSingleCreditTimeout = creditIds.length === 1;
+      
+      if (isSingleCreditTimeout) {
+        errorMessage = `Backend timeout: Processing 1 credit ID (${creditIds[0]}) took longer than 2 minutes. This indicates a backend performance issue. Please check backend logs at ${baseURL} for the GenerateBookings endpoint. The backend may be stuck or processing very slowly.`;
+        console.error('🚨 CRITICAL: Backend timeout with single credit ID:', {
+          creditId: creditIds[0],
+          timeout: '120 seconds',
+          issue: 'Backend is taking too long to process a single credit ID',
+          possibleCauses: [
+            'Backend endpoint is stuck in an infinite loop',
+            'Database query is hanging or very slow',
+            'External API call is timing out',
+            'Backend is waiting for a resource that never becomes available',
+            'Backend server is overloaded or unresponsive'
+          ],
+          action: 'Check backend logs and server status',
+          backendUrl: baseURL,
+          endpoint: '/ApprovedUserCredits/GenerateBookings'
+        });
+      } else {
+        errorMessage = `Request timed out after 2 minutes while processing ${creditIds.length} credit IDs. The server may still be processing your request. Please check backend logs or try again with fewer credit IDs.`;
+      }
+    } else if (err.code === 'ERR_NETWORK' || err.message === 'Network Error') {
+      errorMessage = `Cannot connect to backend (${baseURL}). Please verify the backend is running and accessible.`
+    } else if (err.response?.status === 404) {
+      errorMessage = `Endpoint not found: ${endpoint}. Please verify the backend endpoint path.`
+    } else if (err.response?.status === 403) {
+      errorMessage = 'Access forbidden. You do not have permission to perform this action.'
+    } else if (err.response?.status >= 500) {
+      errorMessage = `Server error (${err.response?.status}): ${err.response?.statusText || 'Internal server error'}. Please check backend logs.`
+    } else if (err.response?.status >= 400) {
+      errorMessage = `Client error (${err.response?.status}): ${err.response?.statusText || err.response?.data?.Message || 'Bad request'}`
+    } else if (err.response?.data?.Message) {
+      errorMessage = err.response.data.Message
+    } else if (err.response?.statusText) {
+      errorMessage = err.response.statusText
+    } else if (err.message) {
+      errorMessage = err.message
+    }
+    
+    // Include response data if available for debugging
+    const errorData = err.response?.data || (err.response ? { status: err.response.status, statusText: err.response.statusText } : undefined)
+    
+    return { 
+      Status: err.response?.status || 500, 
+      Message: errorMessage,
+      data: errorData
     }
   }
 }
