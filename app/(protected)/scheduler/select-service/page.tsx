@@ -35,6 +35,13 @@ export default function ServiceList() {
 
   useEffect(() => {
     async function load(user: User) {
+      console.log('📋 Fetching services from DEV environment for user:', {
+        userId: user.UserID,
+        apiBaseUrl: process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
+        environment: 'DEV',
+        note: 'Services are fetched from dev backend via proxy'
+      });
+      
       const response = await apiClient.get<{Status: number, Message: string, Object: Service[]}>('/company/getservices', {
         params: {companyadminId: user.UserID}
       });
@@ -43,6 +50,12 @@ export default function ServiceList() {
         toast.error(response.Message);
         return;
       }
+
+      console.log('✅ Services fetched successfully from DEV environment:', {
+        count: response.Object?.length || 0,
+        environment: 'DEV',
+        services: response.Object?.map(s => s.ServiceName) || []
+      });
 
       setData(response.Object);
       setLoading(false);

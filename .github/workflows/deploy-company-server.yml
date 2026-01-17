@@ -1,0 +1,84 @@
+name: Deploy to Company Server
+
+on:
+  push:
+    branches: [ master, dev, twitchers ]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - '.cursorignore'
+  workflow_dispatch:
+    branches: [ master, dev, twitchers ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type Check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_DEV_API_URL: ${{ secrets.NEXT_PUBLIC_DEV_API_URL }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ secrets.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY }}
+
+      - name: Determine deployment target
+        id: deployment
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
+            echo "target=production" >> $GITHUB_OUTPUT
+            echo "server=${{ secrets.COMPANY_PRODUCTION_SERVER }}" >> $GITHUB_OUTPUT
+            echo "branch=master" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/dev" ]]; then
+            echo "target=dev" >> $GITHUB_OUTPUT
+            echo "server=${{ secrets.COMPANY_DEV_SERVER }}" >> $GITHUB_OUTPUT
+            echo "branch=dev" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/twitchers" ]]; then
+            echo "target=twitchers" >> $GITHUB_OUTPUT
+            echo "server=${{ secrets.COMPANY_TWITCHERS_SERVER }}" >> $GITHUB_OUTPUT
+            echo "branch=twitchers" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy to Company Server
+        # TODO: Replace with actual deployment method (SSH, FTP, API, etc.)
+        # This is a placeholder - configure based on your company server setup
+        run: |
+          echo "🚀 Deploying to ${{ steps.deployment.outputs.target }} server..."
+          echo "Server: ${{ steps.deployment.outputs.server }}"
+          echo "Branch: ${{ steps.deployment.outputs.branch }}"
+          # Example deployment commands (customize based on your server):
+          # - SSH deployment: scp -r .next/* user@server:/path/to/app
+          # - API deployment: curl -X POST ${{ steps.deployment.outputs.server }}/deploy
+          # - Docker: docker build and push to registry
+          echo "✅ Deployment completed (placeholder - configure actual deployment method)"
+
+      - name: Slack Notification
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            STATUS="✅ Success"
+            EMOJI="🚀"
+          else
+            STATUS="❌ Failed"
+            EMOJI="⚠️"
+          fi
+          
+          # Uncomment and configure when Slack webhook is ready
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data "{\"text\":\"${EMOJI} Deployment ${STATUS}\nBranch: ${{ steps.deployment.outputs.branch }}\nTarget: ${{ steps.deployment.outputs.target }}\nCommit: ${{ github.sha }}\"}" \
+          #   ${{ secrets.SLACK_WEBHOOK }}

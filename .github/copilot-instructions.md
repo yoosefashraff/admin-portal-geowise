@@ -43,6 +43,36 @@ This is a **Next.js 16 service dispatch admin portal** for Geowise. Core feature
 
 ## Key Development Workflows
 
+### Branching Strategy
+- **Always start from `master`** when creating new features
+- Create `feature/task-description` branches from `master`
+- Merge flow: `feature/*` → `dev` → `master` → `netlify` (auto) → `twitchers` (optional)
+- See [.agent/workflows/feature-development.md](.agent/workflows/feature-development.md) for details
+
+### ⚠️ Repository Safety (CRITICAL)
+**NEVER push to the wrong repository!**
+
+- **`upstream`** = `GeoWise-AI/company-admin-portal` → Company server (master/dev/twitchers)
+- **`origin`** = `yoosefashraff/company-admin-portal` → Netlify only (netlify branch, auto-synced)
+
+**Rules:**
+1. **ALWAYS push feature/dev/master/twitchers to `upstream`** (GeoWise repo)
+2. **NEVER push to `origin`** except for rare manual backups
+3. **Always verify remote before pushing:** `git remote -v`
+4. **Use explicit remote names:** `git push upstream <branch>` (never just `git push`)
+5. **Netlify sync is automatic** - GitHub Actions handles it, don't manually push to origin
+
+**Before ANY push command, verify:**
+- ✅ Using `upstream` for company work
+- ✅ Not accidentally pushing to `origin` (personal repo)
+- ✅ Branch matches intended deployment target
+
+**MANDATORY Verification Steps:**
+1. **Always run `git remote -v`** before suggesting any push command
+2. **Always use explicit remote names** - never suggest `git push` without remote
+3. **If unsure, run verification script:** `./scripts/verify-remotes.sh`
+4. **Pre-push hook will block wrong pushes** - if blocked, check the remote!
+
 ### Running the Project
 ```bash
 npm run dev              # Start with Turbopack

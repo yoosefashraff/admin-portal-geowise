@@ -11,6 +11,33 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) and log in.
 
+## ⚠️ Repository Safety
+
+**This project uses dual repositories for deployment. Always verify remotes before pushing!**
+
+- **`upstream`** = `GeoWise-AI/company-admin-portal` → Company server (master/dev/twitchers)
+- **`origin`** = `yoosefashraff/company-admin-portal` → Netlify (netlify branch, auto-synced)
+
+**Rule:** Always push company work to `upstream`, never to `origin`. 
+
+**Safety Mechanisms:**
+- ✅ **Pre-push hook** automatically blocks wrong pushes
+- ✅ **Verification scripts** for manual checks
+- ✅ **Agent instructions** enforce verification before pushes
+
+**Setup (first time only):**
+```bash
+# Install safety hooks
+npm run setup-git-safety
+# OR (Windows PowerShell)
+powershell -ExecutionPolicy Bypass -File scripts/setup-git-safety.ps1
+
+# Verify remotes are correct
+npm run verify-remotes
+```
+
+See [.git-safety-rules.md](.git-safety-rules.md) and [docs/git-safety-enforcement.md](docs/git-safety-enforcement.md) for details.
+
 ## Environment Variables
 
 Create a `.env.local` file with:

@@ -16,25 +16,53 @@ function getClientApiUrl(): string {
   // Use dev environment if set (new variable takes precedence over legacy)
   const finalDevUrl = cleanDevUrl || cleanLegacyDevUrl;
 
-  // CRITICAL: Require dev environment - do NOT fall back to production
-  if (!finalDevUrl) {
+  // Determine which API to use
+  // Netlify deployments should use dev API
+  // Local development should use dev API
+  // Company server deployments should use production API
+  const isDevelopment = typeof window !== 'undefined' 
+    ? window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    : process.env.NODE_ENV === 'development';
+  
+  const isNetlify = typeof window !== 'undefined' 
+    ? window.location.hostname.includes('netlify.app')
+    : false;
+
+  let baseUrl: string;
+
+  if (finalDevUrl) {
+    // Dev environment is configured - use it (for local dev and Netlify)
+    baseUrl = finalDevUrl.replace(/\/+$/, '');
+  } else if (isNetlify || isDevelopment) {
+    // Netlify or local development but no dev API configured - throw error
     const errorMsg = 'Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.';
-    console.error('❌ Production API disabled:', {
-      reason: 'Production API usage is disabled for testing',
+    console.error('❌ API not configured:', {
+      reason: 'No dev API URL configured',
       requiredEnvVar: 'NEXT_PUBLIC_DEV_API_URL',
       action: 'Set NEXT_PUBLIC_DEV_API_URL=https://gw5cndev.geowise.ai',
-      note: 'Legacy NEXT_PUBLIC_SERVICE_REQUESTS_API_URL also supported for backward compatibility'
+      environment: isNetlify ? 'Netlify (requires dev API)' : 'Local development'
     });
-    // In browser, throw error that can be caught by error boundary
     if (typeof window !== 'undefined') {
       throw new Error(errorMsg);
     }
-    // On server, throw immediately
     throw new Error(errorMsg);
+  } else if (cleanProdUrl) {
+    // Company server production deployment - use production API
+    baseUrl = cleanProdUrl.replace(/\/+$/, '');
+    if (typeof window !== 'undefined') {
+      console.warn('⚠️ Using production API (for company server deployment):', baseUrl);
+    }
+  } else {
+    // No API configured at all
+    throw new Error('API URL not configured. Set NEXT_PUBLIC_DEV_API_URL for Netlify/local dev or NEXT_PUBLIC_API_URL for company server production.');
   }
 
-  // Dev environment is configured - use it
-  let baseUrl = finalDevUrl.replace(/\/+$/, '');
+  // In local development, use Next.js proxy to avoid CORS issues
+  // The proxy is configured in next.config.js to rewrite /api/* to the backend
+  if (isDevelopment && typeof window !== 'undefined') {
+    // Use relative path to leverage Next.js proxy
+    return '/api';
+  }
 
   // CRITICAL: Upgrade to HTTPS if running on a secure domain (like Netlify) 
   // or if using the known dev domain which supports HTTPS.
@@ -47,9 +75,11 @@ function getClientApiUrl(): string {
 
   if (typeof window !== 'undefined') {
     console.warn('🔍 Client-side API using environment:', {
-      requested: finalDevUrl,
+      requested: finalDevUrl || cleanProdUrl || 'not set',
       resolved: baseUrl,
-      protocol: baseUrl.startsWith('https') ? 'HTTPS ✅' : 'HTTP ⚠️'
+      environment: finalDevUrl ? 'DEV' : 'PRODUCTION',
+      deployment: isNetlify ? 'Netlify' : isDevelopment ? 'Local Dev (using proxy)' : 'Company Server',
+      protocol: baseUrl.startsWith('https') ? 'HTTPS ✅' : baseUrl === '/api' ? 'Next.js Proxy ✅' : 'HTTP ⚠️'
     });
   }
 
@@ -61,15 +91,26 @@ const API_BASE_URL = getClientApiUrl();
 const axiosInstance: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000, // 60 second timeout
-  withCredentials: true,
+  withCredentials: true, // Important: sends cookies with requests
   headers: {
     "Accept": "application/json",
     "Content-Type": "application/json"
   }
 });
 
+// Request interceptor for logging in development
 axiosInstance.interceptors.request.use(
   (config) => {
+    // Log requests in development
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      console.log('📤 Client API Request:', {
+        method: config.method?.toUpperCase(),
+        url: config.url,
+        baseURL: config.baseURL,
+        fullUrl: `${config.baseURL}${config.url}`,
+        hasCredentials: config.withCredentials,
+      });
+    }
     return config;
   },
   (error: AxiosError) => Promise.reject(error)

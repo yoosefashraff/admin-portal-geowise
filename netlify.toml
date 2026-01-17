@@ -4,18 +4,17 @@
   # Next.js plugin handles publish directory automatically
   # If not using plugin, publish = ".next"
 
-# Branch-specific configuration
-[context.dev]
-  # Build from dev branch
-  branch = "dev"
-  command = "npm run build"
+# Netlify Configuration
+# This file is used when deploying from personal repo's 'netlify' branch
+# The netlify branch is auto-synced from geowise repo's master/dev branches
 
 [context.production]
-  # Production branch (usually main/master)
-  branch = "master"
+  # Netlify branch (synced from geowise master/dev)
+  branch = "netlify"
   command = "npm run build"
 
-# Environment variables can be set per context in Netlify dashboard
-# Or uncomment below to set in this file:
-# [context.dev.environment]
-#   NEXT_PUBLIC_DEV_API_URL = "https://gw5cndev.geowise.ai"
+# Environment variables should be configured in Netlify dashboard
+# for the netlify branch context
+# [context.production.environment]
+#   NEXT_PUBLIC_API_URL = "https://gw5cn.geowise.ai"
+#   NEXT_PUBLIC_GOOGLE_MAPS_API_KEY = "your_key_here"

@@ -23,30 +23,13 @@ const nextConfig = {
       },
     ],
   },
-  // Proxy API calls in development (optional fallback - CORS is resolved on backend)
+  // Note: API proxy is handled by app/api/[...path]/route.ts
+  // This provides better cookie forwarding than Next.js rewrites
+  // Rewrites are disabled to avoid conflicts with the API route handler
   async rewrites() {
-    // Check for dev environment first
-    const devUrl = process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
-    
-    // CRITICAL: Require dev environment - do NOT fall back to production
-    if (!devUrl) {
-      console.warn('⚠️ Next.js proxy: Dev environment not configured. Proxy will not be set up.');
-      console.warn('   Set NEXT_PUBLIC_DEV_API_URL=https://gw5cndev.geowise.ai to enable proxy.');
-      // Return empty rewrites - direct API calls will be used instead
-      return [];
-    }
-    
-    // Use dev environment for proxy
-    const backendUrl = devUrl.replace(/\/+$/, ''); // Remove trailing slash
-    
-    console.warn('✅ Next.js proxy configured for DEV environment:', backendUrl);
-    
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${backendUrl}/:path*`,
-      },
-    ];
+    // API routes take precedence, so rewrites are not needed
+    // The API route handler at app/api/[...path]/route.ts handles all /api/* requests
+    return [];
   },
   // Performance optimizations
   experimental: {

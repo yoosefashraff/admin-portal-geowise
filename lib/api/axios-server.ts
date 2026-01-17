@@ -23,24 +23,39 @@ function getApiBaseUrl(): string {
   // Use dev environment if set (new variable takes precedence over legacy)
   const finalDevUrl = cleanDevUrl || cleanLegacyDevUrl;
 
-  // CRITICAL: Require dev environment - do NOT fall back to production
-  if (!finalDevUrl) {
+  // Determine which API to use
+  // Netlify deployments should use dev API
+  // Local development should use dev API
+  // Company server deployments should use production API
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const isNetlify = process.env.NETLIFY === 'true' || process.env.VERCEL === 'true'; // Netlify sets NETLIFY=true
+
+  let baseUrl: string;
+
+  if (finalDevUrl) {
+    // Dev environment is configured - use it (for local dev and Netlify)
+    baseUrl = finalDevUrl.replace(/\/+$/, '');
+  } else if (isNetlify || isDevelopment) {
+    // Netlify or local development but no dev API configured - throw error
     const errorMsg = 'Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.';
-    console.error('❌ Production API disabled:', {
-      reason: 'Production API usage is disabled for testing',
+    console.error('❌ API not configured:', {
+      reason: 'No dev API URL configured',
       requiredEnvVar: 'NEXT_PUBLIC_DEV_API_URL',
       action: 'Set NEXT_PUBLIC_DEV_API_URL=https://gw5cndev.geowise.ai',
-      note: 'Legacy NEXT_PUBLIC_SERVICE_REQUESTS_API_URL also supported for backward compatibility',
+      environment: isNetlify ? 'Netlify (requires dev API)' : 'Local development',
       devUrl: cleanDevUrl || 'not set',
       legacyDevUrl: cleanLegacyDevUrl || 'not set',
       prodUrl: cleanProdUrl || 'not set'
     });
     throw new Error(errorMsg);
+  } else if (cleanProdUrl) {
+    // Company server production deployment - use production API
+    baseUrl = cleanProdUrl.replace(/\/+$/, '');
+    console.warn('⚠️ Server-side using production API (for company server deployment):', baseUrl);
+  } else {
+    // No API configured at all
+    throw new Error('API URL not configured. Set NEXT_PUBLIC_DEV_API_URL for Netlify/local dev or NEXT_PUBLIC_API_URL for company server production.');
   }
-
-  // Dev environment is configured - use it
-  // Remove trailing slash (axios handles it correctly with paths starting with /)
-  let baseUrl = finalDevUrl.replace(/\/+$/, '');
 
   // CRITICAL: Upgrade to HTTPS for the known dev domain which supports HTTPS.
   // This avoids Mixed Content issues when the client receives these URLs
@@ -49,11 +64,12 @@ function getApiBaseUrl(): string {
   }
 
   if (typeof window === 'undefined') {
-    console.warn('✅ Using DEV API Base URL:', baseUrl);
-    console.warn('📋 Dev Environment Configuration:', {
-      requested: finalDevUrl,
+    console.warn('✅ Server-side API Base URL:', baseUrl);
+    console.warn('📋 API Environment Configuration:', {
+      requested: finalDevUrl || cleanProdUrl || 'not set',
       resolved: baseUrl,
-      environment: 'DEV',
+      environment: finalDevUrl ? 'DEV' : 'PRODUCTION',
+      deployment: isNetlify ? 'Netlify' : isDevelopment ? 'Local Dev' : 'Company Server',
       protocol: baseUrl.startsWith('https') ? 'HTTPS ✅' : 'HTTP ⚠️'
     });
   }
@@ -109,7 +125,7 @@ class ServerAxiosConfig {
 
     // For dev environment, handle SSL certificate verification issues
     // The dev backend may use a self-signed certificate or certificate not in Node.js CA store
-    const isDevEnvironment = this.baseURL.includes('gw5cndev') || this.baseURL.includes('localhost');
+    const isDevEnvironment = this.baseURL.includes('gw5cndev') || this.baseURL.includes('localhost') || this.baseURL.includes('127.0.0.1');
     const httpsAgent = isDevEnvironment
       ? new https.Agent({
         rejectUnauthorized: false // Only for dev - allows self-signed certs
