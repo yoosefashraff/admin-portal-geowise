@@ -91,6 +91,11 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
     const endpoint = '/ApprovedUserCredits/GenerateBookings';
     const fullUrl = `${baseUrl}${endpoint}`;
     
+    // Log cookie status before request
+    const cookieValue = typeof document !== 'undefined' 
+      ? document.cookie.split('; ').find(row => row.startsWith('xyzCompAuthorize='))?.split('=')[1]
+      : 'N/A (server-side)';
+    
     console.log('📞 Client-side auto-dispatch calling backend directly:', {
       environment: 'DEV ✅',
       baseUrl,
@@ -98,6 +103,10 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
       fullUrl,
       creditIds,
       isDev: isDevEnvironment,
+      hasCookie: !!cookieValue,
+      cookieLength: cookieValue?.length || 0,
+      cookieDomain: typeof document !== 'undefined' ? document.domain : 'N/A',
+      requestOrigin: typeof window !== 'undefined' ? window.location.origin : 'N/A',
       note: 'Bypassing Netlify Functions to avoid 26s timeout - calling DEV backend directly'
     });
 
@@ -106,7 +115,7 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
       { CreditIds: creditIds },
       {
         timeout: 120000, // 120 seconds for long-running operations
-        withCredentials: true, // Send cookies
+        withCredentials: true, // Send cookies (critical for authentication)
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -115,9 +124,36 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
       }
     );
 
+    // Check for authentication errors even if status is 200
+    // Backend may return 200 with "Authentication Error" message
+    const responseMessage = response.data?.Message || response.data?.message || '';
+    const responseStatus = response.data?.Status || response.status;
+    const isAuthError = responseMessage.toLowerCase().includes('authentication') || 
+                       responseMessage.toLowerCase().includes('unauthorized') ||
+                       responseMessage.toLowerCase().includes('login') ||
+                       responseStatus === 401 || responseStatus === 403 ||
+                       response.status === 401 || response.status === 403;
+
+    if (isAuthError) {
+      console.error('❌ Auto-Dispatch: Authentication error from backend', {
+        httpStatus: response.status,
+        responseStatus: responseStatus,
+        message: responseMessage,
+        fullResponse: response.data,
+        cookieWasPresent: !!cookieValue,
+        cookieLength: cookieValue?.length || 0,
+        note: 'Cookie may not be sent correctly due to CORS/SameSite restrictions. Cookie must be set by backend with Domain=.geowise.ai'
+      });
+      return {
+        Status: 401,
+        Message: responseMessage || 'Authentication required. Please log out and log back in, then try again.',
+        data: undefined
+      };
+    }
+
     return {
       Status: response.status,
-      Message: response.data?.Message,
+      Message: responseMessage,
       data: response.data?.data || response.data
     };
   } catch (error: any) {
