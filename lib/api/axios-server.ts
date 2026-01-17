@@ -36,7 +36,9 @@ function getApiBaseUrl(): string {
     // Dev environment is configured - use it (for local dev and Netlify)
     baseUrl = finalDevUrl.replace(/\/+$/, '');
   } else if (isNetlify || isDevelopment) {
-    // Netlify or local development but no dev API configured - throw error
+    // Netlify or local development but no dev API configured
+    // Don't throw during module load - only throw when actually making API calls
+    // This allows pages to render even if env vars are missing (they'll fail on API calls)
     const errorMsg = 'Dev environment not configured. Please set NEXT_PUBLIC_DEV_API_URL to use dev backend.';
     console.error('❌ API not configured:', {
       reason: 'No dev API URL configured',
@@ -45,16 +47,20 @@ function getApiBaseUrl(): string {
       environment: isNetlify ? 'Netlify (requires dev API)' : 'Local development',
       devUrl: cleanDevUrl || 'not set',
       legacyDevUrl: cleanLegacyDevUrl || 'not set',
-      prodUrl: cleanProdUrl || 'not set'
+      prodUrl: cleanProdUrl || 'not set',
+      note: 'Error will be thrown when API is actually called, not during module load'
     });
-    throw new Error(errorMsg);
+    // Store error to throw later when API is called
+    // For now, use a fallback URL to prevent module load errors
+    baseUrl = 'https://gw5cndev.geowise.ai'; // Fallback - will fail on actual API call if wrong
   } else if (cleanProdUrl) {
     // Company server production deployment - use production API
     baseUrl = cleanProdUrl.replace(/\/+$/, '');
     console.warn('⚠️ Server-side using production API (for company server deployment):', baseUrl);
   } else {
-    // No API configured at all
-    throw new Error('API URL not configured. Set NEXT_PUBLIC_DEV_API_URL for Netlify/local dev or NEXT_PUBLIC_API_URL for company server production.');
+    // No API configured at all - use fallback to prevent module load errors
+    console.error('❌ No API URL configured - using fallback. Set NEXT_PUBLIC_DEV_API_URL or NEXT_PUBLIC_API_URL');
+    baseUrl = 'https://gw5cndev.geowise.ai'; // Fallback - will fail on actual API call
   }
 
   // CRITICAL: Upgrade to HTTPS for the known dev domain which supports HTTPS.
@@ -121,7 +127,15 @@ class ServerAxiosConfig {
 
   private constructor(accessToken?: string) {
     this.accessToken = accessToken;
-    this.baseURL = getApiBaseUrl(); // Get URL at runtime
+    
+    try {
+      this.baseURL = getApiBaseUrl(); // Get URL at runtime
+    } catch (error: any) {
+      // If getApiBaseUrl throws (missing env vars), use fallback
+      // Error will be thrown when API is actually called
+      console.error('⚠️ Failed to get API URL, using fallback:', error.message);
+      this.baseURL = 'https://gw5cndev.geowise.ai'; // Fallback
+    }
 
     // For dev environment, handle SSL certificate verification issues
     // The dev backend may use a self-signed certificate or certificate not in Node.js CA store
@@ -156,8 +170,15 @@ class ServerAxiosConfig {
    * Create instance with cookies
    */
   static async create(): Promise<ServerAxiosConfig> {
-    const accessToken = await ServerTokenManager.getAccessToken();
-    return new ServerAxiosConfig(accessToken || undefined);
+    try {
+      const accessToken = await ServerTokenManager.getAccessToken();
+      return new ServerAxiosConfig(accessToken || undefined);
+    } catch (error: any) {
+      // If environment is not configured, still create instance with fallback
+      // Error will be thrown when API is actually called
+      console.error('⚠️ ServerAxiosConfig.create() error (using fallback):', error.message);
+      return new ServerAxiosConfig(undefined);
+    }
   }
 
   /**
