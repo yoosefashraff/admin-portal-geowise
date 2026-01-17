@@ -68,8 +68,14 @@ export const useAuthStore = create<AuthState>()(
             
             response = await fetchResponse.json();
             
-            // Backend should have set cookie via Set-Cookie header with Domain=.geowise.ai
-            console.warn('🍪 [NETLIFY] Backend should have set cookie - check DevTools Application → Cookies');
+            // CRITICAL: Backend sets cookie with Domain=.geowise.ai (not visible in document.cookie on netlify.app)
+            // We MUST store the cookie value in Zustand store so protected layout can find it
+            // The cookie will be sent automatically by browser for API requests to geowise.ai
+            if (!response.Cookie) {
+              throw new Error('No cookie received from backend');
+            }
+            
+            console.warn('🍪 [NETLIFY] Backend set cookie with Domain=.geowise.ai - storing value in Zustand store');
           } else {
             // Localhost: Use Server Action (works with proxy)
             response = await loginAction({ UserName, Password });
