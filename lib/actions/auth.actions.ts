@@ -197,8 +197,8 @@ export async function loginAction(data: LoginRequest) {
     value: json.Cookie,
     path: "/",
     httpOnly: false,
-        sameSite: "lax",
-        secure: false,
+        sameSite: "none", // Required for cross-origin requests (Netlify → backend)
+        secure: true, // Required when sameSite is "none" on HTTPS
         maxAge: maxAge,
   });
     } catch (cookieError: any) {

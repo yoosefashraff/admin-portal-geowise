@@ -40,9 +40,10 @@ export const useAuthStore = create<AuthState>()(
           const response = await loginAction({ UserName, Password });
           
           // Also set cookie client-side so it's available for server actions
+          // Use SameSite=None; Secure for cross-origin requests (Netlify → backend)
           if (response.Cookie && typeof document !== 'undefined') {
             const maxAge = 60 * 60 * 24 * 30; // 30 days in seconds
-            document.cookie = `xyzCompAuthorize=${response.Cookie}; path=/; max-age=${maxAge}; SameSite=Lax`;
+            document.cookie = `xyzCompAuthorize=${response.Cookie}; path=/; max-age=${maxAge}; SameSite=None; Secure`;
           }
           
           set({
@@ -116,9 +117,10 @@ export const useAuthStore = create<AuthState>()(
         if (state) {
           state.isLoading = false
           // Restore cookie to browser cookie store on page load
+          // Use SameSite=None; Secure for cross-origin requests (Netlify → backend)
           if (state.cookie && typeof document !== 'undefined') {
             const maxAge = 60 * 60 * 24 * 30; // 30 days in seconds
-            document.cookie = `xyzCompAuthorize=${state.cookie}; path=/; max-age=${maxAge}; SameSite=Lax`;
+            document.cookie = `xyzCompAuthorize=${state.cookie}; path=/; max-age=${maxAge}; SameSite=None; Secure`;
           }
         }
       },
