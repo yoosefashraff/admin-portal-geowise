@@ -10,7 +10,9 @@
     "verify-remotes": "bash scripts/verify-remotes.sh",
     "push-safe": "bash scripts/git-push-safety.sh",
     "setup-git-safety": "bash scripts/setup-git-safety.sh",
-    "netlify:link": "netlify link --id 41c6482c-f551-4650-98ba-ed3b29cac712"
+    "netlify:link": "netlify link --id 41c6482c-f551-4650-98ba-ed3b29cac712",
+    "prepare-ftp": "node scripts/prepare-ftp-deploy.js",
+    "deploy-ftp": "node scripts/deploy-ftp.js"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",
@@ -82,6 +84,7 @@
     "@types/react": "^19",
     "@types/react-date-range": "^1.4.10",
     "@types/react-dom": "^19",
+    "basic-ftp": "^5.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.0.3",
     "tailwindcss": "^4",

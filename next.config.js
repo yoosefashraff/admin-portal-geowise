@@ -1,4 +1,6 @@
 const nextConfig = {
+  // Standalone output for FTP deployment (self-contained Node.js app)
+  output: 'standalone',
   images: {
     remotePatterns: [
       {
