@@ -935,9 +935,14 @@ export async function importServiceRequests(
 ): Promise<{
   Status: number;
   Message?: string;
+  Object?: any;
   data?: {
-    success: number;
+    success?: number;
+    SuccessCount?: number;
+    ErrorCount?: number;
+    count?: number;
     errors?: string[];
+    ErrorLogs?: string[];
     validation?: {
       isValid: boolean;
       errors: string[];

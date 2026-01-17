@@ -242,7 +242,7 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
       const response = await importServiceRequests(formData, user.UserID);
 
       if (response.Status === 201) {
-        const successCount = response.data?.SuccessCount || response.data?.success || response.data?.count || 0;
+        const successCount = response.data?.SuccessCount ?? response.data?.success ?? response.data?.count ?? 0;
         
         // Log the full response to see what the backend returns
         console.log('✅ Import successful! Full response:', JSON.stringify(response, null, 2));
@@ -336,9 +336,9 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
         }
         
         // Show specific error if import failed
-        if (successCount === 0 && response.data?.ErrorCount > 0) {
+        if (successCount === 0 && (response.data?.ErrorCount ?? 0) > 0) {
           toast.error(
-            `Import failed: ${response.data.ErrorCount} error(s). Check console for details.`,
+            `Import failed: ${response.data?.ErrorCount ?? 0} error(s). Check console for details.`,
             { duration: 8000 }
           );
         }
