@@ -102,36 +102,12 @@ const axiosInstance: AxiosInstance = axios.create({
   }
 });
 
-// Request interceptor for logging and cookie handling
+// Request interceptor for logging
 axiosInstance.interceptors.request.use(
   (config) => {
-    // For cross-origin requests, ensure cookie is manually added if withCredentials doesn't work
-    // This is a fallback in case browser blocks cookie due to SameSite/Secure issues
-    if (typeof window !== 'undefined' && config.withCredentials) {
-      const cookies = document.cookie;
-      const xyzCookie = cookies.split(';').find(c => c.trim().startsWith('xyzCompAuthorize='));
-      
-      if (xyzCookie && config.headers) {
-        // Manually set Cookie header as fallback
-        // Note: Browsers may still block this if CORS doesn't allow it, but it's worth trying
-        const cookieValue = xyzCookie.split('=')[1]?.trim();
-        if (cookieValue) {
-          config.headers.Cookie = `xyzCompAuthorize=${cookieValue}`;
-          
-          // Log in development or on Netlify for debugging
-          const isNetlify = window.location.hostname.includes('netlify.app');
-          if (isNetlify || window.location.hostname === 'localhost') {
-            console.warn('🍪 Manually adding Cookie header to request:', {
-              url: config.url,
-              baseURL: config.baseURL,
-              hasCookieHeader: !!config.headers.Cookie,
-              cookieLength: cookieValue.length,
-              note: 'Fallback in case browser blocks cookie with withCredentials'
-            });
-          }
-        }
-      }
-    }
+    // Note: We cannot manually set Cookie header - browsers block it as "unsafe header"
+    // Cookies must be set by backend via Set-Cookie header and sent automatically by browser
+    // with credentials: 'include' (which is set via withCredentials: true)
     
     // Log requests in development
     if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
@@ -141,7 +117,7 @@ axiosInstance.interceptors.request.use(
         baseURL: config.baseURL,
         fullUrl: `${config.baseURL}${config.url}`,
         hasCredentials: config.withCredentials,
-        hasCookieHeader: !!(config.headers as any)?.Cookie,
+        note: 'Cookie will be sent automatically by browser if set by backend'
       });
     }
     return config;
