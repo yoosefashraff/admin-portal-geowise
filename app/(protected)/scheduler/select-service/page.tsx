@@ -11,7 +11,7 @@ import {DashboardHeader} from "@/components/layout/DashboardHeader";
 import {SchedulerSteps} from "@/components/layout/SchedulerSteps";
 import {useSchedulerStore} from "@/lib/store/schedulerStore";
 import { useRouter } from 'next/navigation';
-import { apiClient } from "@/lib/api/axios-instance";
+import { getServices } from "@/lib/actions/scheduler.actions";
 import ServiceSkeleton from "@/components/skeleton/ServiceSkeleton";
 import {User} from "@/lib/types/auth.types";
 import { useSessionStorage } from '@/lib/hooks/useSessionStorage';
@@ -35,30 +35,34 @@ export default function ServiceList() {
 
   useEffect(() => {
     async function load(user: User) {
-      console.log('📋 Fetching services from DEV environment for user:', {
+      console.log('📋 Fetching services via Server Action (no CORS issues):', {
         userId: user.UserID,
-        apiBaseUrl: process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
         environment: 'DEV',
-        note: 'Services are fetched from dev backend via proxy'
+        note: 'Using Server Action - runs on server, no CORS issues'
       });
       
-      const response = await apiClient.get<{Status: number, Message: string, Object: Service[]}>('/company/getservices', {
-        params: {companyadminId: user.UserID}
-      });
+      try {
+        const response = await getServices({ companyadminId: user.UserID });
 
-      if(response.Status !== 201){
-        toast.error(response.Message);
-        return;
+        if(response.Status !== 201){
+          toast.error(response.Message || 'Failed to fetch services');
+          setLoading(false);
+          return;
+        }
+
+        console.log('✅ Services fetched successfully via Server Action:', {
+          count: response.Object?.length || 0,
+          environment: 'DEV',
+          services: response.Object?.map(s => s.ServiceName) || []
+        });
+
+        setData(response.Object || []);
+        setLoading(false);
+      } catch (error: any) {
+        console.error('❌ Failed to fetch services:', error);
+        toast.error(error.message || 'Failed to fetch services');
+        setLoading(false);
       }
-
-      console.log('✅ Services fetched successfully from DEV environment:', {
-        count: response.Object?.length || 0,
-        environment: 'DEV',
-        services: response.Object?.map(s => s.ServiceName) || []
-      });
-
-      setData(response.Object);
-      setLoading(false);
     }
     if(user){
       load(user);
