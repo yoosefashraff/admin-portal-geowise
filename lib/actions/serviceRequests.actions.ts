@@ -937,11 +937,11 @@ export async function importServiceRequests(
   Object?: any;
   data?: {
     success?: number;
-    SuccessCount?: number;
-    ErrorCount?: number;
+    SuccessCount?: number; // Backend returns this
+    ErrorCount?: number;   // Backend returns this
+    ErrorLogs?: string[];  // Backend returns this
     count?: number;
     errors?: string[];
-    ErrorLogs?: string[];
     validation?: {
       isValid: boolean;
       errors: string[];

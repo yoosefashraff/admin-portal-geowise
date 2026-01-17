@@ -242,7 +242,8 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
       const response = await importServiceRequests(formData, user.UserID);
 
       if (response.Status === 201) {
-        const successCount = response.data?.SuccessCount ?? response.data?.success ?? response.data?.count ?? 0;
+        // TypeScript-safe access to SuccessCount (backend returns this)
+        const successCount = (response.data as any)?.SuccessCount ?? response.data?.success ?? response.data?.count ?? 0;
         
         // Log the full response to see what the backend returns
         console.log('✅ Import successful! Full response:', JSON.stringify(response, null, 2));
@@ -322,25 +323,27 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
         }
         
         // Show errors if any
-        if (response.data?.ErrorLogs && response.data.ErrorLogs.length > 0) {
-          const errorCount = response.data.ErrorLogs.length;
-          const errorMessages = response.data.ErrorLogs.slice(0, 3).join('; ');
+        if ((response.data as any)?.ErrorLogs && (response.data as any).ErrorLogs.length > 0) {
+          const errorLogs = (response.data as any).ErrorLogs;
+          const errorCount = errorLogs.length;
+          const errorMessages = errorLogs.slice(0, 3).join('; ');
           toast.error(
             `Import failed: ${errorCount} error(s). ${errorMessages}${errorCount > 3 ? '...' : ''}`,
             { duration: 10000 }
           );
-          console.error('Import errors:', response.data.ErrorLogs);
+          console.error('Import errors:', errorLogs);
         } else if (response.data?.errors && response.data.errors.length > 0) {
           toast.warning(`${response.data.errors.length} error(s) occurred during import`);
           console.warn('Import errors:', response.data.errors);
         }
         
         // Show specific error if import failed
-        if (successCount === 0 && (response.data?.ErrorCount ?? 0) > 0) {
-          toast.error(
-            `Import failed: ${response.data?.ErrorCount ?? 0} error(s). Check console for details.`,
-            { duration: 8000 }
-          );
+        const errorCount = (response.data as any)?.ErrorCount ?? 0;
+        if (successCount === 0 && errorCount > 0) {
+            toast.error(
+              `Import failed: ${errorCount} error(s). Check console for details.`,
+              { duration: 8000 }
+            );
         }
         
         // Don't pass parsedData to avoid React Server Action serialization errors
