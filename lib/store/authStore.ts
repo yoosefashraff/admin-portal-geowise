@@ -41,9 +41,49 @@ export const useAuthStore = create<AuthState>()(
           
           // Also set cookie client-side so it's available for server actions
           // Use SameSite=None; Secure for cross-origin requests (Netlify → backend)
+          // CRITICAL: Delete old cookie first to ensure new attributes are applied
           if (response.Cookie && typeof document !== 'undefined') {
+            // Delete existing cookie with all possible attribute combinations
+            // This ensures we remove any cookie with old/wrong attributes
+            const deleteOptions = [
+              'xyzCompAuthorize=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT',
+              'xyzCompAuthorize=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax',
+              'xyzCompAuthorize=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure',
+              'xyzCompAuthorize=; path=/; domain=geowise-admin-portal.netlify.app; expires=Thu, 01 Jan 1970 00:00:00 GMT',
+            ];
+            deleteOptions.forEach(opt => {
+              try {
+                document.cookie = opt;
+              } catch (e) {
+                // Ignore errors
+              }
+            });
+            
+            // Wait a moment for deletion to complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
             const maxAge = 60 * 60 * 24 * 30; // 30 days in seconds
-            document.cookie = `xyzCompAuthorize=${response.Cookie}; path=/; max-age=${maxAge}; SameSite=None; Secure`;
+            // Set new cookie with correct attributes for cross-origin
+            // CRITICAL: Must use Secure flag for SameSite=None to work
+            const cookieString = `xyzCompAuthorize=${response.Cookie}; path=/; max-age=${maxAge}; SameSite=None; Secure`;
+            document.cookie = cookieString;
+            
+            // Verify cookie was set
+            const verifyCookie = document.cookie.includes('xyzCompAuthorize=');
+            console.warn('🍪 Cookie set client-side:', {
+              hasValue: !!response.Cookie,
+              valueLength: response.Cookie?.length || 0,
+              attributes: 'SameSite=None; Secure',
+              cookieSet: verifyCookie,
+              cookieString: cookieString.substring(0, 100) + '...',
+              note: 'Check DevTools → Application → Cookies to verify Secure flag is ✓ (checked)',
+              warning: verifyCookie ? 'Cookie set successfully' : '⚠️ Cookie may not have been set - check browser console'
+            });
+            
+            // Double-check: Try to read it back
+            if (!verifyCookie) {
+              console.error('❌ Cookie verification failed - cookie not found in document.cookie after setting');
+            }
           }
           
           set({
@@ -119,8 +159,30 @@ export const useAuthStore = create<AuthState>()(
           // Restore cookie to browser cookie store on page load
           // Use SameSite=None; Secure for cross-origin requests (Netlify → backend)
           if (state.cookie && typeof document !== 'undefined') {
+            // Delete existing cookie with all possible attribute combinations
+            const deleteOptions = [
+              'xyzCompAuthorize=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT',
+              'xyzCompAuthorize=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax',
+              'xyzCompAuthorize=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=None; Secure',
+            ];
+            deleteOptions.forEach(opt => {
+              try {
+                document.cookie = opt;
+              } catch (e) {
+                // Ignore errors
+              }
+            });
+            
             const maxAge = 60 * 60 * 24 * 30; // 30 days in seconds
+            // Set cookie with correct attributes for cross-origin
+            // CRITICAL: Must use Secure flag for SameSite=None to work
             document.cookie = `xyzCompAuthorize=${state.cookie}; path=/; max-age=${maxAge}; SameSite=None; Secure`;
+            
+            console.warn('🍪 Cookie restored on page load:', {
+              hasValue: !!state.cookie,
+              attributes: 'SameSite=None; Secure',
+              note: 'Cookie restored from localStorage with correct attributes'
+            });
           }
         }
       },

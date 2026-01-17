@@ -187,24 +187,42 @@ export async function loginAction(data: LoginRequest) {
     }
 
     try {
-  const cookieStore = await cookies();
+      const cookieStore = await cookies();
+
+      // Delete existing cookie first to ensure new attributes are applied
+      // This is important if cookie was previously set with different attributes
+      try {
+        cookieStore.delete("xyzCompAuthorize");
+      } catch (deleteError) {
+        // Ignore delete errors (cookie might not exist)
+      }
 
       // Set cookie with 30 days expiration for persistent login
       const maxAge = 60 * 60 * 24 * 30; // 30 days in seconds
 
-  cookieStore.set({
-    name: "xyzCompAuthorize",
-    value: json.Cookie,
-    path: "/",
-    httpOnly: false,
+      cookieStore.set({
+        name: "xyzCompAuthorize",
+        value: json.Cookie,
+        path: "/",
+        httpOnly: false,
         sameSite: "none", // Required for cross-origin requests (Netlify → backend)
         secure: true, // Required when sameSite is "none" on HTTPS
         maxAge: maxAge,
-  });
+      });
+      
+      console.warn('🍪 Cookie set server-side:', {
+        name: 'xyzCompAuthorize',
+        hasValue: !!json.Cookie,
+        valueLength: json.Cookie?.length || 0,
+        attributes: 'sameSite=none; secure=true',
+        note: 'Client-side will also set cookie to ensure Secure flag is applied'
+      });
     } catch (cookieError: any) {
-      // Still return the response even if cookie setting fails
-      // The client-side store will handle it
-      // Log error but don't fail the login
+      // Log error but don't fail login - client-side will handle it
+      console.error('⚠️ Server-side cookie setting failed (client-side will handle):', {
+        error: cookieError.message,
+        note: 'Client-side cookie setting will ensure Secure flag is set'
+      });
     }
 
   return json;
