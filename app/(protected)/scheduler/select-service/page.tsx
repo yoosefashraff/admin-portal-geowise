@@ -35,30 +35,49 @@ export default function ServiceList() {
 
   useEffect(() => {
     async function load(user: User) {
-      console.log('📋 Fetching services from DEV environment for user:', {
-        userId: user.UserID,
-        apiBaseUrl: process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL || 'not set',
-        environment: 'DEV',
-        note: 'Services are fetched from dev backend via proxy'
-      });
-      
-      const response = await apiClient.get<{Status: number, Message: string, Object: Service[]}>('/company/getservices', {
-        params: {companyadminId: user.UserID}
-      });
+      try {
+        // Get the actual API base URL being used (from axios instance)
+        const apiBaseUrl = typeof window !== 'undefined' 
+          ? (window as any).__API_BASE_URL__ || 'checking...'
+          : 'server-side';
+        
+        console.log('📋 Fetching services from DEV environment for user:', {
+          userId: user.UserID,
+          apiBaseUrl: apiBaseUrl,
+          environment: 'DEV',
+          note: 'Services are fetched directly from dev backend (no Netlify proxy)'
+        });
+        
+        const response = await apiClient.get<{Status: number, Message: string, Object: Service[]}>('/company/getservices', {
+          params: {companyadminId: user.UserID}
+        });
 
-      if(response.Status !== 201){
-        toast.error(response.Message);
-        return;
+        if(response.Status !== 201){
+          toast.error(response.Message || 'Failed to load services');
+          setLoading(false);
+          return;
+        }
+
+        console.log('✅ Services fetched successfully from DEV environment:', {
+          count: response.Object?.length || 0,
+          environment: 'DEV',
+          services: response.Object?.map(s => s.ServiceName) || []
+        });
+
+        setData(response.Object);
+        setLoading(false);
+      } catch (error: any) {
+        console.error('❌ Failed to fetch services:', {
+          error: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+          url: error.config?.url,
+          baseURL: error.config?.baseURL,
+          fullUrl: error.config ? `${error.config.baseURL}${error.config.url}` : 'unknown'
+        });
+        toast.error(`Failed to load services: ${error.message || 'Network error'}`);
+        setLoading(false);
       }
-
-      console.log('✅ Services fetched successfully from DEV environment:', {
-        count: response.Object?.length || 0,
-        environment: 'DEV',
-        services: response.Object?.map(s => s.ServiceName) || []
-      });
-
-      setData(response.Object);
-      setLoading(false);
     }
     if(user){
       load(user);

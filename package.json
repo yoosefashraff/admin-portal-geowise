@@ -9,7 +9,8 @@
     "lint": "eslint",
     "verify-remotes": "bash scripts/verify-remotes.sh",
     "push-safe": "bash scripts/git-push-safety.sh",
-    "setup-git-safety": "bash scripts/setup-git-safety.sh"
+    "setup-git-safety": "bash scripts/setup-git-safety.sh",
+    "netlify:link": "netlify link --id 41c6482c-f551-4650-98ba-ed3b29cac712"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",

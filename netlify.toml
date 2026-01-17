@@ -1,20 +1,14 @@
 [build]
-  # Build command for Next.js
   command = "npm run build"
-  # Next.js plugin handles publish directory automatically
-  # If not using plugin, publish = ".next"
+  # Publish dir set by @netlify/plugin-nextjs
 
-# Netlify Configuration
-# This file is used when deploying from personal repo's 'main' branch
-# The main branch is auto-synced from geowise repo's master/dev branches
+# --- API: Direct to backend (no Netlify proxy) ---
+# Client-side: axios uses NEXT_PUBLIC_DEV_API_URL → https://gw5cndev.geowise.ai directly.
+# No /api proxy, no Netlify Functions for API. Saves Functions usage and latency.
+# Set in Netlify: Environment variables → NEXT_PUBLIC_DEV_API_URL = https://gw5cndev.geowise.ai
 
 [context.production]
-  # Main branch (synced from geowise master/dev)
   branch = "main"
   command = "npm run build"
 
-# Environment variables should be configured in Netlify dashboard
-# for the netlify branch context
-# [context.production.environment]
-#   NEXT_PUBLIC_API_URL = "https://gw5cn.geowise.ai"
-#   NEXT_PUBLIC_GOOGLE_MAPS_API_KEY = "your_key_here"
+# Environment variables (in Netlify UI): NEXT_PUBLIC_DEV_API_URL, NEXT_PUBLIC_GOOGLE_MAPS_API_KEY

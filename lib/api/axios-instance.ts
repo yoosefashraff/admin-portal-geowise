@@ -92,6 +92,11 @@ function getClientApiUrl(): string {
 
 const API_BASE_URL = getClientApiUrl();
 
+// Expose API base URL to window for debugging (production-safe)
+if (typeof window !== 'undefined') {
+  (window as any).__API_BASE_URL__ = API_BASE_URL;
+}
+
 const axiosInstance: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000, // 60 second timeout
@@ -129,10 +134,21 @@ axiosInstance.interceptors.response.use(
     // Handle network errors (CORS should be resolved, but log if issues persist)
     if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
       const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
-      console.error('🚫 Network Error (CORS should be resolved - check backend if this persists):', {
+      const fullUrl = error.config?.url ? `${error.config.baseURL}${error.config.url}` : 'unknown';
+      console.error('🚫 Network Error - API call failed:', {
         origin,
-        target: error.config?.url ? `${error.config.baseURL}${error.config.url}` : 'unknown',
-        message: 'If CORS errors persist, verify backend CORS configuration includes this origin'
+        target: fullUrl,
+        baseURL: error.config?.baseURL,
+        url: error.config?.url,
+        message: error.message,
+        code: error.code,
+        possibleCauses: [
+          'CORS: Backend must allow origin: ' + origin,
+          'Backend server may be down or unreachable',
+          'SSL certificate issue (if using HTTPS)',
+          'Network connectivity problem'
+        ],
+        action: 'Verify backend CORS includes: ' + origin
       });
     }
 

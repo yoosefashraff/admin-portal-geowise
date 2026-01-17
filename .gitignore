@@ -37,3 +37,6 @@ next-env.d.ts
 
 # Note: .git/hooks/pre-push is NOT ignored - it should be committed
 # The hook is installed via scripts/setup-git-safety.sh
+
+# Local Netlify folder
+.netlify
