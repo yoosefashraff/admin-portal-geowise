@@ -853,8 +853,7 @@ export async function processCustomers(
         if (createResponse.Status === 201 || createResponse.Status === 200) {
           const newCustomerId =
             createResponse.CustomerId ||
-            createResponse.Customer?.Id ||
-            createResponse.Customer?.UserId;
+            createResponse.Customer?.Id;
 
           if (newCustomerId) {
             customerMap.set(phone, newCustomerId);
