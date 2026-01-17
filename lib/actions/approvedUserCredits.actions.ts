@@ -777,6 +777,72 @@ export async function exportApprovedUserCredits(): Promise<{ Status: number; Mes
  * 
  * @returns Response with Status, Message, and data containing success/error counts
  */
+/**
+ * Process a single batch of credit IDs (for Netlify timeout compliance)
+ * Netlify has a 26-second limit, so we use 20-second timeout per batch
+ */
+async function generateBookingsBatch(
+  creditIds: number[],
+  serviceRequestsAPI: any,
+  batchNumber: number,
+  totalBatches: number
+): Promise<{ 
+  Status: number; 
+  Message?: string; 
+  data?: any;
+}> {
+  const batchStartTime = Date.now()
+  const timeoutMs = 20000 // 20 seconds per batch (under Netlify's 26s limit)
+  
+  console.log(`📦 Processing batch ${batchNumber}/${totalBatches} with ${creditIds.length} credit ID(s):`, creditIds)
+  
+  try {
+    const response = await Promise.race([
+      serviceRequestsAPI.post('/ApprovedUserCredits/GenerateBookings', {
+        CreditIds: creditIds
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error(`Batch ${batchNumber} timeout after ${timeoutMs/1000} seconds`)), timeoutMs)
+      )
+    ]) as any
+    
+    const batchDuration = Date.now() - batchStartTime
+    console.log(`✅ Batch ${batchNumber}/${totalBatches} completed in ${batchDuration}ms (${(batchDuration / 1000).toFixed(1)}s)`)
+    
+    const isResponseObject = response && typeof response === 'object' && !Array.isArray(response)
+    if (!isResponseObject) {
+      return {
+        Status: 500,
+        Message: `Batch ${batchNumber} returned invalid response format`,
+        data: undefined
+      }
+    }
+    
+    const responseStatus = response.Status || response.status || (response.success ? 201 : 500)
+    const responseMessage = response.Message || response.message || 'Batch processed'
+    const responseData = response.Object || response.data || response
+    
+    return {
+      Status: responseStatus,
+      Message: responseMessage,
+      data: responseData
+    }
+  } catch (err: any) {
+    const batchDuration = Date.now() - batchStartTime
+    console.error(`❌ Batch ${batchNumber}/${totalBatches} failed after ${batchDuration}ms:`, err.message)
+    
+    return {
+      Status: err.response?.status || 500,
+      Message: `Batch ${batchNumber} failed: ${err.message}`,
+      data: err.response?.data
+    }
+  }
+}
+
+/**
+ * Generate bookings from credit IDs
+ * Automatically batches large requests to comply with Netlify's 26-second timeout limit
+ */
 export async function generateBookings(
   creditIds: number[]
 ): Promise<{ 
@@ -798,7 +864,19 @@ export async function generateBookings(
       }
     }
 
-    console.log('Calling GenerateBookings API (Auto-Dispatch) with credit IDs:', creditIds)
+    // Netlify timeout workaround: batch processing
+    // Netlify has a 26-second limit, so we process in batches of 3-5 credit IDs
+    // with a 20-second timeout per batch to stay safely under the limit
+    const BATCH_SIZE = 3 // Conservative: 3 credit IDs per batch
+    const shouldBatch = creditIds.length > BATCH_SIZE
+    
+    console.log('Calling GenerateBookings API (Auto-Dispatch) with credit IDs:', {
+      totalCreditIds: creditIds.length,
+      creditIds: creditIds,
+      willBatch: shouldBatch,
+      batchSize: shouldBatch ? BATCH_SIZE : 'N/A (single request)',
+      reason: shouldBatch ? 'Netlify 26-second timeout limit' : 'Small enough for single request'
+    })
     
     // CRITICAL: Check authentication cookie before making request
     const { cookies } = await import('next/headers');
@@ -880,33 +958,10 @@ export async function generateBookings(
       cookieNames: allCookies.map(c => c.name)
     });
     
-    // Use service requests axios instance (supports dev environment)
-    // This ensures auto-dispatch uses the same dev environment as service requests import
-    // The axios instance will read cookies fresh and add them to the request
-    const serviceRequestsAPI = await createServiceRequestsAxios()
-    
-    // Verify the axios instance will have the cookie
-    // Double-check cookie is still available right before making the request
-    const cookieStoreBeforeRequest = await cookies();
-    const authCookieBeforeRequest = cookieStoreBeforeRequest.get('xyzCompAuthorize');
-    if (!authCookieBeforeRequest || !authCookieBeforeRequest.value) {
-      const errorMsg = 'Authentication cookie lost before request. Please log in again.';
-      console.error('❌ GenerateBookings: Cookie disappeared before request:', {
-        hadCookie: !!authCookie,
-        hasCookieNow: !!authCookieBeforeRequest,
-        action: 'User needs to log in again - possible session expiration'
-      });
-      return {
-        Status: 401,
-        Message: errorMsg,
-        data: undefined
-      };
-    }
     const isUsingDev = !!process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL
     console.log('🔧 Auto-Dispatch using Service Requests API URL (dev environment if configured)')
     
     // CRITICAL: Log where bookings will be created
-    // Note: Dev environment is for testing, but data should be treated as REAL (realistic locations, real data structure)
     console.warn('⚠️ AUTO-DISPATCH DATA STORAGE LOCATION:', {
       environment: 'DEV (Testing Environment)',
       message: '✅ Bookings will be created on DEV environment (testing database, but data is REAL and realistic)',
@@ -914,103 +969,167 @@ export async function generateBookings(
       note: 'Dev environment uses separate database for testing, but data structure and locations are realistic'
     })
     
-    // Add timeout to prevent hanging (120 seconds for booking generation - backend may need more time)
+    // Use service requests axios instance (supports dev environment)
+    const serviceRequestsAPI = await createServiceRequestsAxios()
+    
+    // Verify cookie is still available
+    const cookieStoreBeforeRequest = await cookies();
+    const authCookieBeforeRequest = cookieStoreBeforeRequest.get('xyzCompAuthorize');
+    if (!authCookieBeforeRequest || !authCookieBeforeRequest.value) {
+      const errorMsg = 'Authentication cookie lost before request. Please log in again.';
+      console.error('❌ GenerateBookings: Cookie disappeared before request')
+      return {
+        Status: 401,
+        Message: errorMsg,
+        data: undefined
+      };
+    }
+    
     const requestStartTime = Date.now()
     let response: any
     
-    // Log exactly what we're sending to the backend
-    console.log('📤 GenerateBookings Request Details:', {
-      creditIdsCount: creditIds.length,
-      creditIds: creditIds,
-      endpoint: '/ApprovedUserCredits/GenerateBookings',
-      timeout: '120 seconds',
-      backendUrl: getDevApiUrl() || 'unknown',
-      purpose: 'Converting pending service requests to bookings via auto-dispatch',
-      note: creditIds.length > 10 
-        ? '⚠️ Processing many credit IDs - this may take longer' 
-        : creditIds.length === 1
-        ? '✅ Processing single credit ID - should complete quickly'
-        : '✅ Processing reasonable number of credit IDs',
-      important: 'This endpoint should ONLY be called when user explicitly runs auto-dispatch. Import should NOT trigger this.'
-    })
-    
-    // Warn if single credit ID might timeout (indicates backend issue)
-    if (creditIds.length === 1) {
-      console.warn('⚠️ Processing single credit ID - if this times out, it indicates a backend performance issue, not a frontend problem.')
-    }
-    
     try {
-      response = await Promise.race([
-        serviceRequestsAPI.post('/ApprovedUserCredits/GenerateBookings', {
-          CreditIds: creditIds
-        }),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Request timeout after 120 seconds')), 120000)
-        )
-      ]) as any
+      // Log exactly what we're sending to the backend
+      console.log('📤 GenerateBookings Request Details:', {
+        creditIdsCount: creditIds.length,
+        creditIds: creditIds,
+        endpoint: '/ApprovedUserCredits/GenerateBookings',
+        timeout: shouldBatch ? `20 seconds per batch (${Math.ceil(creditIds.length / BATCH_SIZE)} batches)` : '20 seconds',
+        backendUrl: getDevApiUrl() || 'unknown',
+        purpose: 'Converting pending service requests to bookings via auto-dispatch',
+        netlifyCompliance: shouldBatch ? '✅ Using batching to comply with Netlify 26s limit' : '✅ Single request under limit',
+        important: 'This endpoint should ONLY be called when user explicitly runs auto-dispatch. Import should NOT trigger this.'
+      })
       
-      const requestDuration = Date.now() - requestStartTime
-      console.log(`✅ GenerateBookings API request completed in ${requestDuration}ms (${(requestDuration / 1000).toFixed(1)}s)`)
-      
-      // Warn if request took a long time
-      if (requestDuration > 90000) {
-        console.warn('⚠️ GenerateBookings took longer than 90 seconds. Consider optimizing backend processing or reducing credit IDs.')
-      }
-      
-      // Log full response structure for debugging
-      // Check if response is an object before using 'in' operator
-      const isResponseObject = response && typeof response === 'object' && !Array.isArray(response)
-      
-      // Safely stringify response for logging
-      let responseStr = 'N/A';
-      if (response !== undefined && response !== null) {
-        try {
-          const stringified = JSON.stringify(response, null, 2);
-          responseStr = stringified || 'Unable to stringify';
-        } catch {
-          responseStr = 'Unable to parse response';
+      if (shouldBatch) {
+        // BATCH PROCESSING: Split into smaller batches
+        const batches: number[][] = []
+        for (let i = 0; i < creditIds.length; i += BATCH_SIZE) {
+          batches.push(creditIds.slice(i, i + BATCH_SIZE))
         }
-      }
-      console.log('📥 GenerateBookings API response (full):', responseStr)
-      
-      // Safely get response value preview
-      let responseValuePreview = 'N/A';
-      if (response !== undefined && response !== null) {
-        if (typeof response === 'string') {
-          responseValuePreview = response.substring(0, 200);
-        } else if (isResponseObject) {
-          responseValuePreview = 'object';
-        } else {
-          try {
-            responseValuePreview = String(response);
-          } catch {
-            responseValuePreview = 'Unable to convert to string';
+        
+        console.log(`🔄 Processing ${batches.length} batch(es) to comply with Netlify timeout limit`)
+        
+        const batchResults: Array<{ Status: number; Message?: string; data?: any }> = []
+        let totalBookingsCreated = 0
+        let totalProcessed = 0
+        const allErrors: string[] = []
+        const allErrorLogs: string[] = []
+        
+        // Process batches sequentially
+        for (let i = 0; i < batches.length; i++) {
+          const batch = batches[i]
+          const batchResult = await generateBookingsBatch(
+            batch,
+            serviceRequestsAPI,
+            i + 1,
+            batches.length
+          )
+          
+          batchResults.push(batchResult)
+          
+          // Aggregate results
+          if (batchResult.Status === 201 || batchResult.Status === 200) {
+            const batchData = batchResult.data || {}
+            totalBookingsCreated += batchData.bookingsCreated || batchData.success || 0
+            totalProcessed += batchData.totalProcessed || batch.length
+          } else {
+            // Collect errors
+            if (batchResult.Message) {
+              allErrors.push(`Batch ${i + 1}: ${batchResult.Message}`)
+            }
+            if (batchResult.data?.ErrorLogs) {
+              allErrorLogs.push(...(Array.isArray(batchResult.data.ErrorLogs) ? batchResult.data.ErrorLogs : [batchResult.data.ErrorLogs]))
+            }
+            if (batchResult.data?.errors) {
+              allErrors.push(...(Array.isArray(batchResult.data.errors) ? batchResult.data.errors : [batchResult.data.errors]))
+            }
           }
         }
+        
+        // Determine overall status
+        const successCount = batchResults.filter(r => r.Status === 201 || r.Status === 200).length
+        const failedCount = batches.length - successCount
+        
+        const requestDuration = Date.now() - requestStartTime
+        console.log(`✅ GenerateBookings (batched) completed in ${requestDuration}ms (${(requestDuration / 1000).toFixed(1)}s)`, {
+          totalBatches: batches.length,
+          successfulBatches: successCount,
+          failedBatches: failedCount,
+          totalBookingsCreated,
+          totalProcessed
+        })
+        
+        // Return aggregated response
+        if (successCount === batches.length) {
+          // All batches succeeded
+          response = {
+            Status: 201,
+            Message: `Successfully processed ${batches.length} batch(es). ${totalBookingsCreated} booking(s) created.`,
+            Object: {
+              success: totalBookingsCreated,
+              totalProcessed,
+              bookingsCreated: totalBookingsCreated,
+              batchesProcessed: batches.length,
+              batchesSuccessful: successCount
+            }
+          }
+        } else if (successCount > 0) {
+          // Partial success
+          response = {
+            Status: 207, // Multi-Status
+            Message: `Partially successful: ${successCount}/${batches.length} batch(es) succeeded. ${totalBookingsCreated} booking(s) created. Some batches failed.`,
+            Object: {
+              success: totalBookingsCreated,
+              totalProcessed,
+              bookingsCreated: totalBookingsCreated,
+              batchesProcessed: batches.length,
+              batchesSuccessful: successCount,
+              batchesFailed: failedCount,
+              errors: allErrors,
+              ErrorLogs: allErrorLogs
+            }
+          }
+        } else {
+          // All batches failed
+          response = {
+            Status: 500,
+            Message: `All ${batches.length} batch(es) failed. No bookings created.`,
+            Object: {
+              success: 0,
+              totalProcessed: 0,
+              bookingsCreated: 0,
+              batchesProcessed: batches.length,
+              batchesSuccessful: 0,
+              batchesFailed: failedCount,
+              errors: allErrors,
+              ErrorLogs: allErrorLogs
+            }
+          }
+        }
+      } else {
+        // SINGLE REQUEST: Process all credit IDs at once (small batch)
+        const batchResult = await generateBookingsBatch(
+          creditIds,
+          serviceRequestsAPI,
+          1,
+          1
+        )
+        
+        const requestDuration = Date.now() - requestStartTime
+        console.log(`✅ GenerateBookings (single request) completed in ${requestDuration}ms (${(requestDuration / 1000).toFixed(1)}s)`)
+        
+        response = batchResult
       }
       
+      // Log response summary
+      const isResponseObject = response && typeof response === 'object' && !Array.isArray(response)
       console.log('📥 GenerateBookings API response (summary):', {
         responseType: typeof response,
         isObject: isResponseObject,
-        isArray: Array.isArray(response),
-        isNull: response === null,
-        isUndefined: response === undefined,
         Status: isResponseObject ? response.Status : undefined,
-        status: isResponseObject ? response.status : undefined,
         Message: isResponseObject ? response.Message : undefined,
-        message: isResponseObject ? response.message : undefined,
-        hasData: isResponseObject ? !!response.data : false,
-        hasObject: isResponseObject ? !!response.Object : false,
-        dataType: isResponseObject ? typeof response.data : typeof response,
-        objectType: isResponseObject ? typeof response.Object : 'N/A',
-        responseKeys: isResponseObject ? Object.keys(response) : [],
-        responseValue: responseValuePreview,
-        responseStructure: {
-          hasStatus: isResponseObject ? ('Status' in response || 'status' in response) : false,
-          hasMessage: isResponseObject ? ('Message' in response || 'message' in response) : false,
-          hasData: isResponseObject ? ('data' in response) : false,
-          hasObject: isResponseObject ? ('Object' in response) : false
-        }
+        hasData: isResponseObject ? !!(response.Object || response.data) : false
       })
     } catch (requestError: any) {
       const requestDuration = Date.now() - requestStartTime
@@ -1018,32 +1137,12 @@ export async function generateBookings(
       throw requestError // Re-throw to be caught by outer catch block
     }
     
-    // Handle different response formats
-    // Backend might return: { Status: 201, Message: "...", Object: {...} }
-    // Or: { status: 201, message: "...", data: {...} }
-    // Or: { success: true, data: {...} }
-    // Or: string, null, undefined (error cases)
+    // Handle response format (batched responses already have Status/Message/data structure)
     const isResponseObject = response && typeof response === 'object' && !Array.isArray(response)
     
     if (!isResponseObject) {
-      // Response is not an object (string, null, undefined, etc.)
-      // Safely convert response to string for logging
-      let responseValueStr = 'N/A';
-      if (response !== undefined && response !== null) {
-        if (typeof response === 'string') {
-          responseValueStr = response.substring(0, 500);
-        } else {
-          try {
-            responseValueStr = String(response);
-          } catch {
-            responseValueStr = 'Unable to convert to string';
-          }
-        }
-      }
-      
       console.error('❌ GenerateBookings API returned non-object response:', {
         responseType: typeof response,
-        responseValue: responseValueStr,
         note: 'Backend may have returned an error message as a string or empty response'
       })
       
@@ -1063,7 +1162,7 @@ export async function generateBookings(
       responseMessage,
       hasData: !!responseData,
       dataType: typeof responseData,
-      isSuccess: responseStatus === 201
+      isSuccess: responseStatus === 201 || responseStatus === 207 // 207 = Multi-Status (partial success)
     })
     
     // Handle 401 Unauthorized in response
@@ -1103,14 +1202,15 @@ export async function generateBookings(
       };
     }
     
-    if (responseStatus === 201 || responseStatus === 200) {
+    // Handle success (201, 200) and partial success (207 = Multi-Status from batched processing)
+    if (responseStatus === 201 || responseStatus === 200 || responseStatus === 207) {
       return { 
-        Status: 201, 
+        Status: responseStatus === 207 ? 207 : 201, // Preserve 207 for partial success
         Message: responseMessage,
         data: responseData
       }
     } else {
-      // Even if status is not 201, return the response so the caller can see the error details
+      // Even if status is not success, return the response so the caller can see the error details
       return { 
         Status: responseStatus, 
         Message: responseMessage,

@@ -1330,9 +1330,18 @@ export default function ServiceRequestsPage() {
       const startTime = Date.now()
       
       // Show a loading message for long-running operations
-      const loadingToast = toast.loading('Processing auto-dispatch... This may take up to 2 minutes.', {
-        description: `Processing ${uniqueCreditIds.length} credit ID(s) for ${selectedServices.length} service request(s)...`
-      })
+      const willBatch = uniqueCreditIds.length > 3
+      const estimatedBatches = willBatch ? Math.ceil(uniqueCreditIds.length / 3) : 1
+      const loadingToast = toast.loading(
+        willBatch 
+          ? `Processing auto-dispatch in ${estimatedBatches} batch(es)... This may take a few minutes.`
+          : 'Processing auto-dispatch... This may take up to 20 seconds.',
+        {
+          description: willBatch
+            ? `Processing ${uniqueCreditIds.length} credit ID(s) in batches to comply with Netlify timeout limits.`
+            : `Processing ${uniqueCreditIds.length} credit ID(s) for ${selectedServices.length} service request(s)...`
+        }
+      )
       
       const response = await generateBookings(uniqueCreditIds)
       const duration = Date.now() - startTime
@@ -1366,9 +1375,21 @@ export default function ServiceRequestsPage() {
         return
       }
       
-      if (response.Status === 201) {
+      if (response.Status === 201 || response.Status === 207) {
+        // 201 = full success, 207 = partial success (some batches succeeded)
         const successCount = response.data?.bookingsCreated || response.data?.success || 0
-        toast.success(`Auto Dispatch started. ${successCount} booking${successCount !== 1 ? 's' : ''} will be created.`)
+        const batchesProcessed = response.data?.batchesProcessed
+        const batchesSuccessful = response.data?.batchesSuccessful
+        
+        if (response.Status === 207) {
+          // Partial success - some batches failed
+          toast.warning(`Auto Dispatch partially completed. ${successCount} booking(s) created from ${batchesSuccessful}/${batchesProcessed} batch(es).`, {
+            description: 'Some batches failed. Check the progress page for details.',
+            duration: 10000
+          })
+        } else {
+          toast.success(`Auto Dispatch started. ${successCount} booking${successCount !== 1 ? 's' : ''} will be created.`)
+        }
         
         // Navigate to progress page
         router.push('/scheduler/auto-dispatch/progress')

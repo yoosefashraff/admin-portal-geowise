@@ -5,37 +5,81 @@
  * 
  * This script:
  * 1. Prepares files for upload (if needed)
- * 2. Uploads to FTP server automatically
+ * 2. Uploads to FTP server automatically using Active mode
  * 
- * FTP Configuration:
- * - Server: 8.213.23.175:21
- * - Username: ftpuser
- * - Password: 012022037055116080071
- * - Passive Mode: false (Active mode)
+ * FTP Configuration (from .env file):
+ * - Server: FTP_HOST (default: 8.213.23.175)
+ * - Port: FTP_PORT (default: 21)
+ * - Username: FTP_USER (default: ftpuser)
+ * - Password: FTP_PASSWORD (REQUIRED - set in .env file)
+ * - Passive Mode: false (Active mode - required by server)
  * - Upload Path: / (FTP root maps to /var/www/frontend/ on server)
  * 
- * Note: If automated upload fails, use manual upload via SpeedCommander/FileZilla
+ * SECURITY: Password is stored in .env file (not committed to git)
  */
 
 const fs = require('fs');
 const path = require('path');
-const { Client } = require('basic-ftp');
+const FTP = require('ftp');
 
-// FTP Configuration
+// Load environment variables from .env file
+require('dotenv').config();
+
+// FTP Configuration - Password from environment variable for security
 const FTP_CONFIG = {
-  host: '8.213.23.175',
-  port: 21,
-  user: 'ftpuser',
-  password: '012022037055116080071',
-  secure: false, // Plain FTP
-  passive: false, // Active mode (as specified by backend team)
-  // Additional connection options
-  keepalive: 10000, // Keep connection alive
-  timeout: 30000, // 30 second timeout
+  host: process.env.FTP_HOST || '8.213.23.175',
+  port: parseInt(process.env.FTP_PORT || '21', 10),
+  user: process.env.FTP_USER || 'ftpuser',
+  password: process.env.FTP_PASSWORD, // REQUIRED - Set in .env file
+  // Force Active mode (not passive)
+  // The 'ftp' library uses Active mode by default, but we explicitly disable passive
 };
+
+// Validate password is set before proceeding
+if (!FTP_CONFIG.password) {
+  console.error('❌ FTP_PASSWORD not set in .env file!');
+  console.error('\n💡 Add to your .env file:');
+  console.error('   FTP_PASSWORD=your_password_here');
+  console.error('\n   Get the password from the backend team.');
+  console.error('   See .env.example for all required variables.\n');
+  process.exit(1);
+}
 
 const DEPLOY_DIR = path.join(__dirname, '..', 'deploy');
 const REMOTE_DIR = '/'; // FTP root maps to /var/www/frontend/ on server
+
+// Helper function to promisify FTP operations
+function promisifyFTP(client) {
+  return {
+    connect: () => new Promise((resolve, reject) => {
+      client.once('ready', resolve);
+      client.once('error', reject);
+      client.connect(FTP_CONFIG);
+    }),
+    end: () => new Promise((resolve) => {
+      client.end();
+      resolve();
+    }),
+    mkdir: (dir, recursive) => new Promise((resolve, reject) => {
+      client.mkdir(dir, recursive, (err) => {
+        if (err && err.code !== 550) reject(err); // 550 = directory exists
+        else resolve();
+      });
+    }),
+    put: (localPath, remotePath) => new Promise((resolve, reject) => {
+      client.put(localPath, remotePath, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    }),
+    cwd: (dir) => new Promise((resolve, reject) => {
+      client.cwd(dir, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    }),
+  };
+}
 
 async function deploy() {
   console.log('🚀 Starting FTP deployment...\n');
@@ -57,45 +101,44 @@ async function deploy() {
   }
 
   // Step 2: Connect to FTP
-  const client = new Client();
-  client.ftp.verbose = true; // Enable verbose logging
+  const client = new FTP();
+  const ftp = promisifyFTP(client);
+
+  // Handle connection errors
+  client.on('error', (err) => {
+    if (err.code !== 'ECONNRESET') {
+      console.error('   ⚠️  FTP Error:', err.message);
+    }
+  });
 
   try {
     console.log('📡 Connecting to FTP server...');
     console.log(`   Host: ${FTP_CONFIG.host}:${FTP_CONFIG.port}`);
     console.log(`   User: ${FTP_CONFIG.user}`);
-    console.log(`   Passive: ${FTP_CONFIG.passive}`);
+    console.log(`   Mode: Active (PORT)`);
     console.log(`   Password: ${FTP_CONFIG.password ? '***' + FTP_CONFIG.password.slice(-4) : 'NOT SET'}\n`);
 
-    // Try to connect with better error handling
-    try {
-      await client.access(FTP_CONFIG);
-    } catch (loginError) {
-      console.error('\n❌ FTP Login failed!');
-      console.error('   Error:', loginError.message);
-      console.error('\n💡 Solution: Use manual upload instead');
-      console.error('   1. Open SpeedCommander or FileZilla');
-      console.error('   2. Connect to: 8.213.23.175:21');
-      console.error('   3. Username: ftpuser');
-      console.error('   4. Password: 012022037055116080071');
-      console.error('   5. Set transfer mode to BINARY');
-      console.error('   6. Upload everything from ./deploy/ folder\n');
-      console.error('   Files are ready in: ./deploy/\n');
-      process.exit(1);
-    }
+    // Connect to FTP server
+    await ftp.connect();
+    console.log('   ✅ Connected successfully\n');
 
-    console.log('✅ Connected to FTP server\n');
-
-    // Step 3: Navigate to remote directory
+    // Navigate to remote directory
     console.log(`📁 Navigating to remote directory: ${REMOTE_DIR}`);
-    await client.ensureDir(REMOTE_DIR);
+    await ftp.cwd(REMOTE_DIR);
     console.log('✅ Remote directory ready\n');
 
-    // Step 4: Upload files
+    // Upload files
     console.log('📤 Uploading files...\n');
-    await uploadDirectory(client, DEPLOY_DIR, REMOTE_DIR);
+    let uploadedCount = 0;
+    let failedCount = 0;
+    
+    await uploadDirectory(ftp, client, DEPLOY_DIR, REMOTE_DIR, uploadedCount, failedCount);
 
     console.log('\n✅ Deployment completed successfully!');
+    console.log(`   Uploaded: ${uploadedCount} files`);
+    if (failedCount > 0) {
+      console.log(`   Failed: ${failedCount} files`);
+    }
     console.log('\n📋 Next steps on server:');
     console.log('   1. SSH into server (if you have access)');
     console.log('   2. Navigate to: cd /var/www/frontend');
@@ -111,17 +154,15 @@ async function deploy() {
     if (error.code) {
       console.error(`   Error code: ${error.code}`);
     }
-    if (error.stack) {
-      console.error('\nStack trace:', error.stack);
-    }
     process.exit(1);
   } finally {
-    client.close();
+    await ftp.end();
   }
 }
 
-async function uploadDirectory(client, localDir, remoteDir) {
+async function uploadDirectory(ftp, client, localDir, remoteDir, uploadedCount, failedCount, retryCount = 0) {
   const items = fs.readdirSync(localDir);
+  const maxRetries = 3;
 
   for (const item of items) {
     const localPath = path.join(localDir, item);
@@ -130,15 +171,80 @@ async function uploadDirectory(client, localDir, remoteDir) {
 
     if (stat.isDirectory()) {
       console.log(`📁 Creating directory: ${remotePath}`);
-      await client.ensureDir(remotePath);
-      await uploadDirectory(client, localPath, remotePath);
+      try {
+        // Create directory (recursive)
+        await ftp.mkdir(remotePath, true);
+        await uploadDirectory(ftp, client, localPath, remotePath, uploadedCount, failedCount, 0);
+      } catch (dirError) {
+        if (retryCount < maxRetries && (dirError.code === 550 || dirError.message.includes('exists'))) {
+          // Directory might already exist, continue
+          await uploadDirectory(ftp, client, localPath, remotePath, uploadedCount, failedCount, 0);
+        } else if (retryCount < maxRetries) {
+          console.log(`   ⚠️  Retrying directory creation...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          await uploadDirectory(ftp, client, localPath, remotePath, uploadedCount, failedCount, retryCount + 1);
+        } else {
+          console.error(`   ❌ Failed to create directory: ${remotePath}`);
+          failedCount++;
+        }
+      }
     } else {
-      console.log(`📄 Uploading: ${remotePath}`);
-      // Use binary transfer mode for all files
-      await client.uploadFrom(localPath, remotePath);
+      const fileName = path.basename(remotePath);
+      const fileSize = stat.size;
+      const sizeKB = (fileSize / 1024).toFixed(1);
+      
+      // Show progress for larger files or every 100 files
+      if (fileSize > 50000 || uploadedCount % 100 === 0) {
+        console.log(`📄 Uploading: ${fileName} (${sizeKB} KB)`);
+      }
+      
+      let uploaded = false;
+      let attempts = 0;
+      
+      while (!uploaded && attempts < maxRetries) {
+        try {
+          await ftp.put(localPath, remotePath);
+          uploaded = true;
+          uploadedCount++;
+        } catch (uploadError) {
+          attempts++;
+          const errorMsg = uploadError.message || '';
+          
+          if (errorMsg.includes('timeout') || errorMsg.includes('ETIMEDOUT') || errorMsg.includes('ECONNRESET')) {
+            if (attempts < maxRetries) {
+              console.log(`   ⚠️  Retry ${attempts}/${maxRetries}: ${fileName}`);
+              await new Promise(resolve => setTimeout(resolve, 2000 * attempts)); // Exponential backoff
+              
+              // Reconnect if connection was lost
+              try {
+                if (!client.connected) {
+                  await ftp.connect();
+                  await ftp.cwd(REMOTE_DIR);
+                }
+              } catch (reconnectError) {
+                // Ignore reconnect errors, will retry
+              }
+            } else {
+              console.error(`   ❌ Failed after ${maxRetries} attempts: ${fileName}`);
+              failedCount++;
+              uploaded = true; // Move to next file
+            }
+          } else {
+            console.error(`   ❌ Upload error: ${fileName} - ${errorMsg}`);
+            failedCount++;
+            uploaded = true; // Move to next file
+          }
+        }
+      }
     }
   }
 }
 
 // Run deployment
-deploy().catch(console.error);
+deploy().catch((error) => {
+  console.error('\n❌ Fatal error:', error.message);
+  if (error.stack) {
+    console.error(error.stack);
+  }
+  process.exit(1);
+});

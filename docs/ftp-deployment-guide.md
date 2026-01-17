@@ -8,13 +8,33 @@ This guide covers deploying the Next.js frontend application to the company serv
 - **Server IP:** `8.213.23.175`
 - **Port:** `21`
 - **Username:** `ftpuser`
-- **Password:** `012022037055116080071`
+- **Password:** ⚠️ **SENSITIVE** - Store in `.env` file (see setup below)
 - **Passive Mode:** `false` (Active mode)
 - **Server Path:** `/var/www/frontend/` (FTP root `/` maps to this)
+
+**⚠️ SECURITY:** FTP password is stored in `.env` file (not committed to git)
 
 ---
 
 ## Quick Start
+
+### 0. Setup FTP Credentials (First Time Only)
+
+**Create or update `.env` file in project root:**
+
+```bash
+# FTP Deployment Credentials (get from backend team)
+FTP_HOST=8.213.23.175
+FTP_PORT=21
+FTP_USER=ftpuser
+FTP_PASSWORD=your_password_here  # ⚠️ Get from backend team
+FTP_PASSIVE=false  # Active mode
+```
+
+**⚠️ Important:**
+- `.env` file is already in `.gitignore` (not committed to git)
+- Never commit passwords to git
+- Get the password from the backend team
 
 ### 1. Build and Prepare
 
@@ -38,7 +58,7 @@ Using SpeedCommander or FileZilla:
    - Host: `8.213.23.175`
    - Port: `21`
    - Username: `ftpuser`
-   - Password: `012022037055116080071`
+   - Password: ⚠️ **Get from backend team** (or check your `.env` file)
    - Passive Mode: `false` (Active mode)
 
 2. **Set Transfer Mode to BINARY** ⚠️ **CRITICAL!**
