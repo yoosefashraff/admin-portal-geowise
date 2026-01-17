@@ -41,26 +41,50 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
     ErrorLogs?: string[];
   } 
 }> {
-  // Get API URL (same logic as client axios instance)
+  // Get API URL - MUST use dev environment (same logic as server-side)
   const devUrl = process.env.NEXT_PUBLIC_DEV_API_URL?.replace(/^["']|["']$/g, '').trim();
   const legacyDevUrl = process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL?.replace(/^["']|["']$/g, '').trim();
   const finalDevUrl = devUrl || legacyDevUrl;
   
   if (!finalDevUrl) {
+    console.error('❌ Auto-Dispatch: Dev environment not configured', {
+      requiredEnvVar: 'NEXT_PUBLIC_DEV_API_URL',
+      action: 'Set NEXT_PUBLIC_DEV_API_URL=https://gw5cndev.geowise.ai in Netlify environment variables'
+    });
     return {
       Status: 500,
-      Message: 'API URL not configured. Set NEXT_PUBLIC_DEV_API_URL for Netlify/local dev.'
+      Message: 'Dev environment not configured. Set NEXT_PUBLIC_DEV_API_URL for Netlify/local dev.'
     };
   }
 
   let baseUrl = finalDevUrl.replace(/\/+$/, '');
   
-  // Upgrade to HTTPS if needed
+  // Upgrade to HTTPS if needed (required for Netlify HTTPS deployment)
   if (baseUrl.startsWith('http://gw5cndev.geowise.ai')) {
     baseUrl = baseUrl.replace('http://', 'https://');
   } else if (typeof window !== 'undefined' && window.location.protocol === 'https:' && baseUrl.startsWith('http://')) {
     baseUrl = baseUrl.replace('http://', 'https://');
   }
+
+  // Verify we're using dev environment
+  const isDevEnvironment = baseUrl.includes('gw5cndev') || baseUrl.includes('localhost');
+  
+  if (!isDevEnvironment) {
+    console.warn('⚠️ Auto-Dispatch: Not using dev environment!', {
+      currentUrl: baseUrl,
+      expected: 'https://gw5cndev.geowise.ai',
+      warning: 'Auto-dispatch should use DEV environment for testing'
+    });
+  }
+
+  // CRITICAL: Log where bookings will be created (same as server-side)
+  console.warn('⚠️ AUTO-DISPATCH DATA STORAGE LOCATION:', {
+    environment: 'DEV (Testing Environment)',
+    message: '✅ Bookings will be created on DEV environment (testing database, but data is REAL and realistic)',
+    devUrl: baseUrl,
+    isDev: isDevEnvironment,
+    note: 'Dev environment uses separate database for testing, but data structure and locations are realistic'
+  });
 
   try {
     // Endpoint path matches server-side: /ApprovedUserCredits/GenerateBookings (no /api prefix)
@@ -68,11 +92,13 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
     const fullUrl = `${baseUrl}${endpoint}`;
     
     console.log('📞 Client-side auto-dispatch calling backend directly:', {
+      environment: 'DEV ✅',
       baseUrl,
       endpoint,
       fullUrl,
       creditIds,
-      note: 'Bypassing Netlify Functions to avoid 26s timeout'
+      isDev: isDevEnvironment,
+      note: 'Bypassing Netlify Functions to avoid 26s timeout - calling DEV backend directly'
     });
 
     const response = await axios.post(
