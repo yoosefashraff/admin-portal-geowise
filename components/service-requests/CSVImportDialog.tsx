@@ -243,13 +243,15 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
 
       if (response.Status === 201) {
         // TypeScript-safe access to SuccessCount (backend returns this)
-        const responseData = response.data as { 
-          SuccessCount?: number; 
+        // Use type assertion to access backend response properties
+        type ImportResponseData = {
+          SuccessCount?: number;
           ErrorCount?: number;
           ErrorLogs?: string[];
-          success?: number; 
+          success?: number;
           count?: number;
-        } | undefined;
+        };
+        const responseData = (response.data as ImportResponseData | undefined);
         const successCount = responseData?.SuccessCount ?? responseData?.success ?? responseData?.count ?? 0;
         
         // Log the full response to see what the backend returns
