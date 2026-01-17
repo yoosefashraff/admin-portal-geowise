@@ -27,6 +27,82 @@ import { useAuthStore } from '@/lib/store/authStore'
 import { toast } from 'sonner'
 import { ServiceRequestsSkeleton } from '@/components/skeleton/ServiceRequestsSkeleton'
 import { CSVImportDialog } from '@/components/service-requests/CSVImportDialog'
+import axios from 'axios'
+
+// Client-side function to call backend directly (bypasses Netlify Functions timeout)
+async function generateBookingsClientSide(creditIds: number[]): Promise<{ 
+  Status: number; 
+  Message?: string; 
+  data?: { 
+    success?: number; 
+    errors?: string[];
+    totalProcessed?: number;
+    bookingsCreated?: number;
+    ErrorLogs?: string[];
+  } 
+}> {
+  // Get API URL (same logic as client axios instance)
+  const devUrl = process.env.NEXT_PUBLIC_DEV_API_URL?.replace(/^["']|["']$/g, '').trim();
+  const legacyDevUrl = process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL?.replace(/^["']|["']$/g, '').trim();
+  const finalDevUrl = devUrl || legacyDevUrl;
+  
+  if (!finalDevUrl) {
+    return {
+      Status: 500,
+      Message: 'API URL not configured. Set NEXT_PUBLIC_DEV_API_URL for Netlify/local dev.'
+    };
+  }
+
+  let baseUrl = finalDevUrl.replace(/\/+$/, '');
+  
+  // Upgrade to HTTPS if needed
+  if (baseUrl.startsWith('http://gw5cndev.geowise.ai')) {
+    baseUrl = baseUrl.replace('http://', 'https://');
+  } else if (typeof window !== 'undefined' && window.location.protocol === 'https:' && baseUrl.startsWith('http://')) {
+    baseUrl = baseUrl.replace('http://', 'https://');
+  }
+
+  try {
+    console.log('📞 Client-side auto-dispatch calling backend directly:', {
+      url: `${baseUrl}/api/ApprovedUserCredits/GenerateBookings`,
+      creditIds,
+      note: 'Bypassing Netlify Functions to avoid 26s timeout'
+    });
+
+    const response = await axios.post(
+      `${baseUrl}/api/ApprovedUserCredits/GenerateBookings`,
+      { CreditIds: creditIds },
+      {
+        timeout: 120000, // 120 seconds for long-running operations
+        withCredentials: true, // Send cookies
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      }
+    );
+
+    return {
+      Status: response.status,
+      Message: response.data?.Message,
+      data: response.data?.data || response.data
+    };
+  } catch (error: any) {
+    console.error('❌ Client-side auto-dispatch failed:', error);
+    
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      return {
+        Status: 504,
+        Message: 'Request timed out after 2 minutes. The server may still be processing your request in the background. Please check backend logs or try again with fewer credit IDs.'
+      };
+    }
+
+    return {
+      Status: error.response?.status || 500,
+      Message: error.response?.data?.Message || error.message || 'Failed to run Auto Dispatch'
+    };
+  }
+}
 
 export default function ServiceRequestsPage() {
   const router = useRouter()
@@ -1334,7 +1410,9 @@ export default function ServiceRequestsPage() {
         description: `Processing ${uniqueCreditIds.length} credit ID(s) for ${selectedServices.length} service request(s)...`
       })
       
-      const response = await generateBookings(uniqueCreditIds)
+      // Call backend directly from client to avoid Netlify Function timeout (26s limit)
+      // This bypasses Server Actions and calls the backend API directly
+      const response = await generateBookingsClientSide(uniqueCreditIds)
       const duration = Date.now() - startTime
       console.log(`GenerateBookings API call completed in ${duration}ms (${(duration / 1000).toFixed(1)}s)`, response)
       
