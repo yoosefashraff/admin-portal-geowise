@@ -73,12 +73,16 @@ function getClientApiUrl(): string {
     baseUrl = baseUrl.replace('http://', 'https://');
   }
 
-  if (typeof window !== 'undefined') {
+  // Log only in local dev (not on Netlify/production) to avoid console noise
+  const isLocalDev = typeof window !== 'undefined' &&
+    process.env.NODE_ENV === 'development' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  if (isLocalDev) {
     console.warn('🔍 Client-side API using environment:', {
       requested: finalDevUrl || cleanProdUrl || 'not set',
       resolved: baseUrl,
       environment: finalDevUrl ? 'DEV' : 'PRODUCTION',
-      deployment: isNetlify ? 'Netlify' : isDevelopment ? 'Local Dev (using proxy)' : 'Company Server',
+      deployment: 'Local Dev (using proxy)',
       protocol: baseUrl.startsWith('https') ? 'HTTPS ✅' : baseUrl === '/api' ? 'Next.js Proxy ✅' : 'HTTP ⚠️'
     });
   }
