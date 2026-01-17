@@ -11,7 +11,7 @@
 - `feature/*` → Feature branches
 
 **Personal Repo (`yoosefashraff/company-admin-portal`):**
-- `netlify` → Netlify deployment (auto-synced)
+- `netlify` → **Main branch** for Netlify deployment (auto-synced from geowise repo)
 
 ### Deployment Flow
 

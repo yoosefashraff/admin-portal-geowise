@@ -19,7 +19,9 @@ This project uses a **dual-repository deployment strategy**:
 
 ### Personal Repository (`yoosefashraff/company-admin-portal`)
 **Branches:**
-- `netlify` → Netlify deployment (auto-synced from geowise repo)
+- `netlify` → **Main branch** for Netlify deployment (auto-synced from geowise repo)
+
+**Note:** `netlify` is treated as the **main branch** on the personal repo. This is the default branch and primary deployment target.
 
 **Deployment:** Netlify automatically deploys from `netlify` branch
 

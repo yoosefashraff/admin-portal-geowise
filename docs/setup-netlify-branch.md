@@ -2,7 +2,9 @@
 
 ## Overview
 
-The `netlify` branch on your personal GitHub repo (`yoosefashraff/company-admin-portal`) is automatically synced from the geowise repo's `master` and `dev` branches via GitHub Actions.
+The `netlify` branch on your personal GitHub repo (`yoosefashraff/company-admin-portal`) is the **main branch** for this repository. It is automatically synced from the geowise repo's `master` and `dev` branches via GitHub Actions.
+
+**Important:** `netlify` should be set as the default branch on your personal GitHub repo.
 
 ## Initial Setup
 
@@ -43,13 +45,20 @@ Add these secrets:
 4. **Slack Notifications** (optional)
    - `SLACK_WEBHOOK` - Slack webhook URL for deployment notifications
 
+### 2. Set Netlify as Default Branch on Personal Repo
+
+1. Go to your personal repo: `yoosefashraff/company-admin-portal`
+2. Settings → Branches
+3. Set `netlify` as the default branch
+4. This ensures `netlify` is treated as the main branch
+
 ### 3. Connect Personal Repo to Netlify
 
 1. Go to Netlify dashboard
 2. Add new site → Import from Git
 3. Select your personal repo: `yoosefashraff/company-admin-portal`
 4. Configure:
-   - **Branch to deploy:** `netlify`
+   - **Branch to deploy:** `netlify` (this should be the default branch)
    - **Build command:** `npm run build`
    - **Publish directory:** `.next`
 5. Add environment variables in Netlify dashboard:

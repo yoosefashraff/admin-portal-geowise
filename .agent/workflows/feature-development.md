@@ -12,7 +12,7 @@ This workflow ensures compliance with the strict branching model: `feature/*` ->
 
 ### Repository Mapping
 - **`upstream`** = `GeoWise-AI/company-admin-portal` → **Company server deployments** (master/dev/twitchers)
-- **`origin`** = `yoosefashraff/company-admin-portal` → **Netlify deployments** (netlify branch only)
+- **`origin`** = `yoosefashraff/company-admin-portal` → **Netlify deployments** (netlify branch is the main branch)
 
 ### Safety Rules (MANDATORY)
 1. **ALWAYS push feature branches to `upstream`** (GeoWise repo), NEVER to `origin` (personal repo)
