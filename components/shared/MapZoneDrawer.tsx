@@ -95,7 +95,10 @@ const MapZoneDrawer: React.FC<MapZoneDrawerProps> = ({
       } else {
         isGoogleMapsLoading = true;
         const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=drawing,geometry`;
+        // Strip quotes if present (common Vercel/Netlify env var issue)
+        const rawKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+        const mapKey = rawKey.replace(/^["']|["']$/g, '').trim();
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${mapKey}&libraries=drawing,geometry`;
         script.async = true;
         script.defer = true;
         script.onload = () => {

@@ -30,7 +30,9 @@ export default function LocationSelect() {
   const [locationInfo, setLocationInfo] = useState<LocationInfo | null>(null);
   const [service] = useSessionStorage('Service', '');
 
-  const mapKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyAq2Vf7Ss-yLruim9i_vog14LwVGPBmt_g';
+  // Strip quotes if present (common Vercel/Netlify env var issue)
+  const rawKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyAq2Vf7Ss-yLruim9i_vog14LwVGPBmt_g';
+  const mapKey = rawKey.replace(/^["']|["']$/g, '').trim();
   const [isMapLoaded, setIsMapLoaded] = useState(false);
 
 

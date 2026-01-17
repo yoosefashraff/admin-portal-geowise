@@ -58,7 +58,9 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
   // Refs for Google Maps autocomplete
   const locationInputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
-  const mapKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyAq2Vf7Ss-yLruim9i_vog14LwVGPBmt_g';
+  // Strip quotes if present (common Vercel/Netlify env var issue)
+  const rawKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyAq2Vf7Ss-yLruim9i_vog14LwVGPBmt_g';
+  const mapKey = rawKey.replace(/^["']|["']$/g, '').trim();
   
   // Ref for name dropdown to handle click outside
   const nameDropdownRef = useRef<HTMLDivElement>(null);
