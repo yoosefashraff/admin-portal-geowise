@@ -267,14 +267,14 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
         });
         
         // Check if backend created bookings instead of service requests
-        const responseData = response.data || response.Object || {};
-        const hasBookings = Array.isArray(responseData) && responseData.length > 0 && responseData[0]?.BookingDate;
-        const hasServiceRequests = Array.isArray(responseData) && responseData.length > 0 && !responseData[0]?.BookingDate;
+        const importResult = response.data || response.Object || {};
+        const hasBookings = Array.isArray(importResult) && importResult.length > 0 && importResult[0]?.BookingDate;
+        const hasServiceRequests = Array.isArray(importResult) && importResult.length > 0 && !importResult[0]?.BookingDate;
         
         console.log('🔍 Checking import result type:', {
           hasBookings,
           hasServiceRequests,
-          dataSample: Array.isArray(responseData) ? responseData[0] : responseData,
+          dataSample: Array.isArray(importResult) ? importResult[0] : importResult,
           warning: hasBookings ? '⚠️ Backend created BOOKINGS instead of service requests - they may not appear in service requests list' : '✅ Backend created service requests',
         });
         
