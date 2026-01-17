@@ -243,7 +243,14 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
 
       if (response.Status === 201) {
         // TypeScript-safe access to SuccessCount (backend returns this)
-        const successCount = (response.data as any)?.SuccessCount ?? response.data?.success ?? response.data?.count ?? 0;
+        const responseData = response.data as { 
+          SuccessCount?: number; 
+          ErrorCount?: number;
+          ErrorLogs?: string[];
+          success?: number; 
+          count?: number;
+        } | undefined;
+        const successCount = responseData?.SuccessCount ?? responseData?.success ?? responseData?.count ?? 0;
         
         // Log the full response to see what the backend returns
         console.log('✅ Import successful! Full response:', JSON.stringify(response, null, 2));
@@ -338,7 +345,7 @@ export function CSVImportDialog({ open, onOpenChange, onImport }: CSVImportDialo
         }
         
         // Show specific error if import failed
-        const errorCount = (response.data as any)?.ErrorCount ?? 0;
+        const errorCount = responseData?.ErrorCount ?? 0;
         if (successCount === 0 && errorCount > 0) {
             toast.error(
               `Import failed: ${errorCount} error(s). Check console for details.`,

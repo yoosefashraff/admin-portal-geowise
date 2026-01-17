@@ -1,6 +1,8 @@
 const nextConfig = {
   // Standalone output for FTP deployment (self-contained Node.js app)
-  output: 'standalone',
+  // Comment out for Render/Railway/Vercel (they handle Next.js natively)
+  // Uncomment if deploying via FTP to company server
+  // output: 'standalone',
   images: {
     remotePatterns: [
       {
