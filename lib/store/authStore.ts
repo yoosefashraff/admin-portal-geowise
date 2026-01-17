@@ -37,11 +37,47 @@ export const useAuthStore = create<AuthState>()(
       // LOGIN use SessionId → ASP.NET return cookie
       login: async (UserName, Password) => {
         try {
-          const response = await loginAction({ UserName, Password });
+          // On Netlify, make direct browser request so backend can set cookie with correct domain
+          const isNetlify = typeof window !== 'undefined' && window.location.hostname.includes('netlify.app');
+          const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
           
-          // Also set cookie client-side so it's available for server actions
-          // Use SameSite=None; Secure for cross-origin requests (Netlify → backend)
-          // CRITICAL: Delete old cookie first to ensure new attributes are applied
+          let response: any;
+          
+          if (isNetlify && isHttps) {
+            // Netlify: Direct browser request - backend sets cookie via Set-Cookie header
+            const devApiUrl = process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_SERVICE_REQUESTS_API_URL;
+            if (!devApiUrl) {
+              throw new Error('Dev API URL not configured');
+            }
+            
+            const loginUrl = `${devApiUrl.replace(/\/+$/, '')}/company/userlogin`;
+            
+            console.warn('🌐 [NETLIFY] Direct browser login (backend sets cookie):', loginUrl);
+            
+            const fetchResponse = await fetch(loginUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+              credentials: 'include', // CRITICAL: Allows browser to accept Set-Cookie from backend
+              body: JSON.stringify({ UserName, Password })
+            });
+            
+            if (!fetchResponse.ok) {
+              const errorData = await fetchResponse.json().catch(() => ({}));
+              throw new Error(errorData.Message || errorData.message || `Login failed: ${fetchResponse.status}`);
+            }
+            
+            response = await fetchResponse.json();
+            
+            // Backend should have set cookie via Set-Cookie header with Domain=.geowise.ai
+            console.warn('🍪 [NETLIFY] Backend should have set cookie - check DevTools Application → Cookies');
+          } else {
+            // Localhost: Use Server Action (works with proxy)
+            response = await loginAction({ UserName, Password });
+          }
+          
+          // Also set cookie client-side as fallback (especially if backend didn't set it)
+          // On Netlify, backend should set cookie with Domain=.geowise.ai via Set-Cookie
+          // But we also set it for netlify.app domain as fallback
           if (response.Cookie && typeof document !== 'undefined') {
             const isNetlify = window.location.hostname.includes('netlify.app');
             const isHttps = window.location.protocol === 'https:';
