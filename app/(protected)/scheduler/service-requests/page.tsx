@@ -63,21 +63,28 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
   }
 
   try {
+    // Endpoint path matches server-side: /ApprovedUserCredits/GenerateBookings (no /api prefix)
+    const endpoint = '/ApprovedUserCredits/GenerateBookings';
+    const fullUrl = `${baseUrl}${endpoint}`;
+    
     console.log('📞 Client-side auto-dispatch calling backend directly:', {
-      url: `${baseUrl}/api/ApprovedUserCredits/GenerateBookings`,
+      baseUrl,
+      endpoint,
+      fullUrl,
       creditIds,
       note: 'Bypassing Netlify Functions to avoid 26s timeout'
     });
 
     const response = await axios.post(
-      `${baseUrl}/api/ApprovedUserCredits/GenerateBookings`,
+      fullUrl,
       { CreditIds: creditIds },
       {
         timeout: 120000, // 120 seconds for long-running operations
         withCredentials: true, // Send cookies
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest' // Tell backend this is an AJAX request
         }
       }
     );
