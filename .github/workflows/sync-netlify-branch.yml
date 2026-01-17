@@ -35,9 +35,9 @@ jobs:
 
       - name: Fetch from personal repo
         run: |
-          git fetch personal || echo "Personal repo not found, will create netlify branch"
+          git fetch personal || echo "Personal repo not found, will create main branch"
 
-      - name: Create or update netlify branch
+      - name: Create or update main branch
         run: |
           # Determine source branch (master or dev)
           if [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
@@ -46,25 +46,25 @@ jobs:
             SOURCE_BRANCH="dev"
           fi
           
-          # Check if netlify branch exists in personal repo
-          if git ls-remote --heads personal netlify | grep -q netlify; then
-            echo "Netlify branch exists, updating..."
-            git checkout -b netlify personal/netlify || git checkout netlify
-            git merge $SOURCE_BRANCH --no-edit -m "Sync from $SOURCE_BRANCH to netlify branch"
+          # Check if main branch exists in personal repo
+          if git ls-remote --heads personal main | grep -q main; then
+            echo "Main branch exists, updating..."
+            git checkout -b main personal/main || git checkout main
+            git merge $SOURCE_BRANCH --no-edit -m "Sync from $SOURCE_BRANCH to main branch"
           else
-            echo "Creating new netlify branch from $SOURCE_BRANCH..."
-            git checkout -b netlify $SOURCE_BRANCH
+            echo "Creating new main branch from $SOURCE_BRANCH..."
+            git checkout -b main $SOURCE_BRANCH
           fi
 
-      - name: Push netlify branch to personal repo
+      - name: Push main branch to personal repo
         run: |
-          git push personal netlify:netlify --force
-          echo "✅ Netlify branch synced to personal repo"
+          git push personal main:main --force
+          echo "✅ Main branch synced to personal repo"
 
       - name: Notification
         if: always()
         run: |
-          echo "🔄 Synced ${{ github.ref_name }} → netlify branch on personal repo"
+          echo "🔄 Synced ${{ github.ref_name }} → main branch on personal repo"
           # Uncomment when Slack webhook is configured
           # curl -X POST -H 'Content-type: application/json' \
           #   --data '{"text":"🔄 Netlify branch synced from ${{ github.ref_name }} to personal repo"}' \

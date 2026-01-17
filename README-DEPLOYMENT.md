@@ -11,15 +11,15 @@
 - `feature/*` → Feature branches
 
 **Personal Repo (`yoosefashraff/company-admin-portal`):**
-- `netlify` → **Main branch** for Netlify deployment (auto-synced from geowise repo)
+- `main` → **Main branch** for Netlify deployment (auto-synced from geowise repo)
 
 ### Deployment Flow
 
 ```
-feature/task → dev → master → netlify (auto) → twitchers (optional)
-     ↓           ↓       ↓          ↓                ↓
-  Local      Company  Company   Netlify        Company
-           Dev Server  Prod     (Personal)    Twitchers
+feature/task → dev → master → main (auto) → twitchers (optional)
+     ↓           ↓       ↓        ↓                ↓
+  Local      Company  Company  Netlify        Company
+           Dev Server  Prod   (Personal)    Twitchers
 ```
 
 ## Workflows
@@ -47,7 +47,7 @@ git push upstream dev
 
 # This triggers:
 # - Deploy to Dev Company Server
-# - Sync to netlify branch (personal repo)
+# - Sync to main branch (personal repo)
 ```
 
 ### 3. Deploy to Production
@@ -82,7 +82,7 @@ All workflows are in `.github/workflows/`:
 
 - **`ci.yml`** - Build & type check on all branches
 - **`deploy-company-server.yml`** - Deploy to company servers (master/dev/twitchers)
-- **`sync-netlify-branch.yml`** - Auto-sync to netlify branch on personal repo
+- **`sync-netlify-branch.yml`** - Auto-sync to main branch on personal repo
 
 ## Required Setup
 

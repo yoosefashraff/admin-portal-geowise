@@ -5,12 +5,12 @@
   # If not using plugin, publish = ".next"
 
 # Netlify Configuration
-# This file is used when deploying from personal repo's 'netlify' branch
-# The netlify branch is auto-synced from geowise repo's master/dev branches
+# This file is used when deploying from personal repo's 'main' branch
+# The main branch is auto-synced from geowise repo's master/dev branches
 
 [context.production]
-  # Netlify branch (synced from geowise master/dev)
-  branch = "netlify"
+  # Main branch (synced from geowise master/dev)
+  branch = "main"
   command = "npm run build"
 
 # Environment variables should be configured in Netlify dashboard

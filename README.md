@@ -16,7 +16,7 @@ Open [http://localhost:3000](http://localhost:3000) and log in.
 **This project uses dual repositories for deployment. Always verify remotes before pushing!**
 
 - **`upstream`** = `GeoWise-AI/company-admin-portal` → Company server (master/dev/twitchers)
-- **`origin`** = `yoosefashraff/company-admin-portal` → Netlify (netlify branch is the main branch, auto-synced)
+- **`origin`** = `yoosefashraff/company-admin-portal` → Netlify (main branch, auto-synced)
 
 **Rule:** Always push company work to `upstream`, never to `origin`. 
 
