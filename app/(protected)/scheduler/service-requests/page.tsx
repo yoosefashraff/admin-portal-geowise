@@ -90,12 +90,31 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
     // Endpoint path matches server-side: /ApprovedUserCredits/GenerateBookings (no /api prefix)
     const endpoint = '/ApprovedUserCredits/GenerateBookings';
     const fullUrl = `${baseUrl}${endpoint}`;
-    
-    // Log cookie status before request
-    const cookieValue = typeof document !== 'undefined' 
+
+    // CRITICAL: On Netlify, the cookie is set for netlify.app domain only.
+    // The browser does NOT send it to gw5cndev.geowise.ai (cross-origin).
+    // We must send the token from Zustand in headers. Backend must accept one of:
+    // - Cookie: xyzCompAuthorize (if it had Domain=.geowise.ai from login — we can't verify)
+    // - Authorization: Bearer <token>
+    // - X-xyzCompAuthorize: <token> (fallback; backend must support if Cookie not sent)
+    const token = typeof window !== 'undefined' ? useAuthStore.getState().cookie : null;
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      headers['X-xyzCompAuthorize'] = token;
+    }
+
+    // document.cookie only shows cookies for current origin (netlify.app). For requests to
+    // geowise.ai the browser sends only cookies for .geowise.ai (set by backend on login).
+    const cookieOnCurrentOrigin = typeof document !== 'undefined'
       ? document.cookie.split('; ').find(row => row.startsWith('xyzCompAuthorize='))?.split('=')[1]
-      : 'N/A (server-side)';
-    
+      : null;
+
     console.log('📞 Client-side auto-dispatch calling backend directly:', {
       environment: 'DEV ✅',
       baseUrl,
@@ -103,11 +122,11 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
       fullUrl,
       creditIds,
       isDev: isDevEnvironment,
-      hasCookie: !!cookieValue,
-      cookieLength: cookieValue?.length || 0,
-      cookieDomain: typeof document !== 'undefined' ? document.domain : 'N/A',
+      tokenFromZustand: !!token,
+      tokenLength: token?.length || 0,
+      cookieOnCurrentOrigin: !!cookieOnCurrentOrigin,
       requestOrigin: typeof window !== 'undefined' ? window.location.origin : 'N/A',
-      note: 'Bypassing Netlify Functions to avoid 26s timeout - calling DEV backend directly'
+      note: 'Sending token via Authorization + X-xyzCompAuthorize (cross-origin cookie not sent to geowise.ai)'
     });
 
     const response = await axios.post(
@@ -115,12 +134,8 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
       { CreditIds: creditIds },
       {
         timeout: 120000, // 120 seconds for long-running operations
-        withCredentials: true, // Send cookies (critical for authentication)
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest' // Tell backend this is an AJAX request
-        }
+        withCredentials: true, // Still send any .geowise.ai cookie if backend set it on login
+        headers,
       }
     );
 
@@ -140,9 +155,8 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
         responseStatus: responseStatus,
         message: responseMessage,
         fullResponse: response.data,
-        cookieWasPresent: !!cookieValue,
-        cookieLength: cookieValue?.length || 0,
-        note: 'Cookie may not be sent correctly due to CORS/SameSite restrictions. Cookie must be set by backend with Domain=.geowise.ai'
+        tokenSentViaHeader: !!token,
+        note: 'Backend must accept Authorization: Bearer or X-xyzCompAuthorize, or set Cookie with Domain=.geowise.ai on login'
       });
       return {
         Status: 401,

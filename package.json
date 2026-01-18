@@ -12,7 +12,8 @@
     "setup-git-safety": "bash scripts/setup-git-safety.sh",
     "netlify:link": "netlify link --id 41c6482c-f551-4650-98ba-ed3b29cac712",
     "prepare-ftp": "node scripts/prepare-ftp-deploy.js",
-    "deploy-ftp": "node scripts/deploy-ftp.js"
+    "deploy-ftp": "node scripts/deploy-ftp.js",
+    "create-env": "node scripts/create-env-file.js"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",

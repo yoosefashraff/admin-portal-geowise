@@ -258,6 +258,51 @@ sudo a2enmod proxy_http
 sudo systemctl restart apache2
 ```
 
+### IIS Configuration (Windows Server)
+
+**If using IIS on Windows Server:**
+
+1. **Install Required Modules:**
+   - Install URL Rewrite module: https://www.iis.net/downloads/microsoft/url-rewrite
+   - Install Application Request Routing (ARR): https://www.iis.net/downloads/microsoft/application-request-routing
+
+2. **Configure Reverse Proxy via IIS Manager:**
+   - Open IIS Manager
+   - Select your site
+   - Double-click "URL Rewrite"
+   - Click "Add Rule" → "Reverse Proxy"
+   - Enter inbound rule: `http://localhost:3000`
+   - Click OK
+
+3. **Or use web.config file:**
+   
+   Create `web.config` in `D:\Data\ftp\frontend\` with:
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <configuration>
+     <system.webServer>
+       <rewrite>
+         <rules>
+           <rule name="ReverseProxyInboundRule1" stopProcessing="true">
+             <match url="(.*)" />
+             <action type="Rewrite" url="http://localhost:3000/{R:1}" />
+           </rule>
+         </rules>
+       </rewrite>
+       <httpProtocol>
+         <customHeaders>
+           <remove name="X-Powered-By" />
+         </customHeaders>
+       </httpProtocol>
+     </system.webServer>
+   </configuration>
+   ```
+
+4. **Increase Timeout (for long-running requests like auto-dispatch):**
+   - In IIS Manager → Select your site → Configuration Editor
+   - Navigate to: `system.webServer/proxy`
+   - Set `timeout` to `00:05:00` (5 minutes) or higher
+
 ---
 
 ## Step 7: Verify Deployment
