@@ -29,6 +29,28 @@ import { ServiceRequestsSkeleton } from '@/components/skeleton/ServiceRequestsSk
 import { CSVImportDialog } from '@/components/service-requests/CSVImportDialog'
 import axios from 'axios'
 
+async function runAutoDispatchClient(creditIds: number[]) {
+  if (!creditIds || creditIds.length === 0) {
+    throw new Error('No approved credits selected');
+  }
+
+  const response = await axios.post(
+    '/api/autodispatch',
+    {
+      creditIds,
+    },
+    {
+      timeout: 120000,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  return response.data;
+}
+
+
 // Client-side function to call backend directly (bypasses Netlify Functions timeout)
 async function generateBookingsClientSide(creditIds: number[]): Promise<{ 
   Status: number; 
@@ -129,15 +151,7 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
       note: 'Sending token via Authorization + X-xyzCompAuthorize (cross-origin cookie not sent to geowise.ai)'
     });
 
-    const response = await axios.post(
-      fullUrl,
-      { CreditIds: creditIds },
-      {
-        timeout: 120000, // 120 seconds for long-running operations
-        withCredentials: true, // Still send any .geowise.ai cookie if backend set it on login
-        headers,
-      }
-    );
+    const response = await runAutoDispatchClient(creditIds);
 
     // Check for authentication errors even if status is 200
     // Backend may return 200 with "Authentication Error" message
@@ -166,7 +180,7 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
     }
 
     return {
-      Status: response.status,
+      Status: response.status || response.data?.Status,
       Message: responseMessage,
       data: response.data?.data || response.data
     };
