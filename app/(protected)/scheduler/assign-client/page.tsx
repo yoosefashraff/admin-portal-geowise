@@ -15,13 +15,12 @@ import { SchedulerSteps } from "@/components/layout/SchedulerSteps";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSchedulerStore } from "@/lib/store/schedulerStore";
-import { apiClient } from "@/lib/api/axios-instance";
 import { Customer, SchedulerData, SchedulerSubmitData } from "@/lib/types/scheduler.types";
+import { listcustomerforscheduler, addCustomerBookings } from "@/lib/actions/scheduler.actions";
 import ClientSkeleton from "@/components/skeleton/ClientSkeleton";
 import { useSessionStorage } from "@/lib/hooks/useSessionStorage";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/authStore";
-import { time } from "console";
 import { toast } from "sonner";
 import { Spinner } from "@/components/ui/spinner";
 import NewClient from "@/components/scheduler/NewClient";
@@ -52,14 +51,17 @@ export default function AssignClientPage(){
 
 	useEffect(() => {
 		async function load() {
-			const response = await apiClient.get<{Response: Customer[]}>('/company/listcustomerforscheduler', {
-				params: {
-					providerId: provider ? JSON.parse(provider).ProviderId : 0
-				}
-			});
-			setData(response.Response);
-			setFilteredData(response.Response);
-			setLoading(false);
+			try {
+				const providerId = provider ? JSON.parse(provider).ProviderId : 0;
+				const response = await listcustomerforscheduler({ providerId });
+				setData(response.Response);
+				setFilteredData(response.Response);
+				setLoading(false);
+			} catch (error: any) {
+				console.error('Error loading customers:', error);
+				toast.error(error.message || 'Failed to load customers');
+				setLoading(false);
+			}
 		}
 		if(provider){
 			load();
@@ -121,28 +123,35 @@ export default function AssignClientPage(){
 			AssociationType: 2,
 			IsBarberBooking: true
 		}
-		//Booking
-		const response = await apiClient.post<{Status: number, Message: string}>('/company/addcustomerbookings', scheduleSubmitData);
+		
+		try {
+			//Booking
+			const response = await addCustomerBookings(scheduleSubmitData);
 
-		console.log(response);
+			console.log(response);
 
-		if(response.Status === 201){
-			setBookingConfirmed(JSON.stringify({
-				...scheduleSubmitData,
-				...JSON.parse(provider),
-				Services: JSON.parse(service)
-			}));
-			removeService();
-			removeProvider();
-			removeLocation();
-			removeBarberDate();
-			removeTimingSlot();
+			if(response.Status === 201){
+				setBookingConfirmed(JSON.stringify({
+					...scheduleSubmitData,
+					...JSON.parse(provider),
+					Services: JSON.parse(service)
+				}));
+				removeService();
+				removeProvider();
+				removeLocation();
+				removeBarberDate();
+				removeTimingSlot();
 
-			router.replace('/scheduler/booking-confirmed');
-		}else{
-			toast.error(response.Message);
+				router.replace('/scheduler/booking-confirmed');
+			}else{
+				toast.error(response.Message || 'Failed to create booking');
+			}
+		} catch (error: any) {
+			console.error('Error creating booking:', error);
+			toast.error(error.message || 'Failed to create booking');
+		} finally {
+			setBookingLoading(false);
 		}
-		setBookingLoading(false);
 	}
 
   return (
