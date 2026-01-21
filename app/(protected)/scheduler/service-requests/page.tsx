@@ -79,40 +79,19 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
     };
   }
 
-  let baseUrl = finalDevUrl.replace(/\/+$/, '');
   
   // Upgrade to HTTPS if needed (required for Netlify HTTPS deployment)
-  if (baseUrl.startsWith('http://gw5cndev.geowise.ai')) {
-    baseUrl = baseUrl.replace('http://', 'https://');
-  } else if (typeof window !== 'undefined' && window.location.protocol === 'https:' && baseUrl.startsWith('http://')) {
-    baseUrl = baseUrl.replace('http://', 'https://');
-  }
 
   // Verify we're using dev environment
-  const isDevEnvironment = baseUrl.includes('gw5cndev') || baseUrl.includes('localhost');
-  
-  if (!isDevEnvironment) {
-    console.warn('⚠️ Auto-Dispatch: Not using dev environment!', {
-      currentUrl: baseUrl,
-      expected: 'https://gw5cndev.geowise.ai',
-      warning: 'Auto-dispatch should use DEV environment for testing'
-    });
-  }
 
   // CRITICAL: Log where bookings will be created (same as server-side)
   console.warn('⚠️ AUTO-DISPATCH DATA STORAGE LOCATION:', {
     environment: 'DEV (Testing Environment)',
     message: '✅ Bookings will be created on DEV environment (testing database, but data is REAL and realistic)',
-    devUrl: baseUrl,
-    isDev: isDevEnvironment,
     note: 'Dev environment uses separate database for testing, but data structure and locations are realistic'
   });
 
   try {
-    // Endpoint path matches server-side: /ApprovedUserCredits/GenerateBookings (no /api prefix)
-    const endpoint = '/ApprovedUserCredits/GenerateBookings';
-    const fullUrl = `${baseUrl}${endpoint}`;
-
     // CRITICAL: On Netlify, the cookie is set for netlify.app domain only.
     // The browser does NOT send it to gw5cndev.geowise.ai (cross-origin).
     // We must send the token from Zustand in headers. Backend must accept one of:
@@ -139,11 +118,7 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
 
     console.log('📞 Client-side auto-dispatch calling backend directly:', {
       environment: 'DEV ✅',
-      baseUrl,
-      endpoint,
-      fullUrl,
       creditIds,
-      isDev: isDevEnvironment,
       tokenFromZustand: !!token,
       tokenLength: token?.length || 0,
       cookieOnCurrentOrigin: !!cookieOnCurrentOrigin,
