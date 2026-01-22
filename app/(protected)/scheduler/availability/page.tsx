@@ -4,19 +4,42 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import AvailabilityCard from '@/components/shared/AvailabilityCard';
+import AvailabilityCard, { AvailabilityDayData } from '@/components/shared/AvailabilityCard';
 import { useAuthStore } from '@/lib/store/authStore';
 import { getAllProvidersForCompany } from '@/lib/actions/provider.actions';
+import { saveProviderAvailability } from '@/lib/actions/calendar.actions';
 import { Provider } from '@/lib/types/provider.types';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AvailabilitySkeleton } from '@/components/skeleton/AvailabilitySkeleton';
+
+const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const;
+
+type DayOfWeek = typeof DAYS_OF_WEEK[number];
+
+interface AvailabilityState {
+  [key: string]: AvailabilityDayData;
+}
 
 export default function AvailabilityPage() {
   const { user } = useAuthStore();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [availability, setAvailability] = useState<AvailabilityState>(() => {
+    // Initialize with default availability
+    const defaultState: AvailabilityState = {};
+    DAYS_OF_WEEK.forEach(day => {
+      defaultState[day] = {
+        isAvailable: day !== 'Saturday' && day !== 'Sunday',
+        startTime: '09:00',
+        endTime: '17:00',
+        breakTimes: []
+      };
+    });
+    return defaultState;
+  });
 
   // Fetch providers
   useEffect(() => {
@@ -59,6 +82,56 @@ export default function AvailabilityPage() {
   const selectedProvider = providers.find(
     (p) => p.ProviderId.toString() === selectedProviderId
   );
+
+  const handleSaveAvailability = async () => {
+    if (!selectedProviderId || !user) {
+      toast.error('Please select a provider');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      // Format availability data for API
+      const availabilityData = DAYS_OF_WEEK.map(day => ({
+        day,
+        isAvailable: availability[day].isAvailable,
+        startTime: availability[day].startTime,
+        endTime: availability[day].endTime,
+        breakTimes: availability[day].breakTimes.map(bt => ({
+          start: bt.start,
+          end: bt.end
+        }))
+      }));
+
+      const response = await saveProviderAvailability({
+        ProviderId: parseInt(selectedProviderId),
+        Availability: availabilityData
+      });
+
+      if (response.Status === 201 || response.Status === 200) {
+        toast.success('Availability saved successfully');
+      } else if (response.Status === 404) {
+        // Endpoint doesn't exist - show helpful message with attempted endpoints
+        const attemptedEndpoints = response.Message?.match(/Attempted endpoints: (.+)/)?.[1] || 'multiple endpoints';
+        toast.error('Backend endpoint not found', {
+          description: `The API endpoint for saving availability does not exist. Attempted: ${attemptedEndpoints}. Please contact the backend team to implement this endpoint or provide the correct endpoint name.`,
+          duration: 12000
+        });
+        console.error('❌ Availability save failed - all endpoints returned 404:', {
+          attemptedEndpoints,
+          providerId: selectedProviderId,
+          suggestion: 'Check backend API documentation (Swagger/OpenAPI) for the correct endpoint to save provider availability/working hours. Common patterns: /api/barber/*, /company/*, /search/*'
+        });
+      } else {
+        toast.error(response.Message || 'Failed to save availability');
+      }
+    } catch (error: any) {
+      console.error('Failed to save availability:', error);
+      toast.error(error.message || 'Failed to save availability. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (isLoading) {
     return <AvailabilitySkeleton />;
@@ -122,52 +195,36 @@ export default function AvailabilityPage() {
 
             {/* Availability Cards Container */}
             <div className="grid grid-cols-3 bg-gray-50" style={{ gap: '20px' }}>
-              <AvailabilityCard 
-                dayOfWeek="Monday" 
-                isAvailable={true}
-                startTime="09:00"
-                endTime="17:00"
-              />
-              <AvailabilityCard 
-                dayOfWeek="Tuesday" 
-                isAvailable={true}
-                startTime="09:00"
-                endTime="17:00"
-              />
-              <AvailabilityCard 
-                dayOfWeek="Wednesday" 
-                isAvailable={true}
-                startTime="09:00"
-                endTime="17:00"
-              />
-              <AvailabilityCard 
-                dayOfWeek="Thursday" 
-                isAvailable={true}
-                startTime="09:00"
-                endTime="17:00"
-              />
-              <AvailabilityCard 
-                dayOfWeek="Friday" 
-                isAvailable={true}
-                startTime="09:00"
-                endTime="17:00"
-              />
-              <AvailabilityCard 
-                dayOfWeek="Saturday" 
-                isAvailable={false}
-              />
-              <AvailabilityCard 
-                dayOfWeek="Sunday" 
-                isAvailable={false}
-              />
+              {DAYS_OF_WEEK.map((day) => (
+                <AvailabilityCard
+                  key={day}
+                  dayOfWeek={day}
+                  value={availability[day]}
+                  onChange={(data) => {
+                    setAvailability(prev => ({
+                      ...prev,
+                      [day]: data
+                    }));
+                  }}
+                />
+              ))}
             </div>
 
             {/* Save Button */}
             <div className="mt-6 flex justify-end">
               <Button
-                className="px-6 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
+                onClick={handleSaveAvailability}
+                disabled={isSaving || !selectedProviderId}
+                className="px-6 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Save Changes
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
               </Button>
             </div>
           </CardContent>

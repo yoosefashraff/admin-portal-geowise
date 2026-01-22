@@ -29,15 +29,26 @@ export async function searchCompanyProvider(data: CompanyProviderPayload) : Prom
     const response : {Object: Provider[]} = await serverAPI.post('/company/searchcompanyprovider', data);
     return response;
   } catch (err: any) {
-    const errorMessage = err.response?.statusText || err.message;
-    throw new Error(errorMessage || "Failed to fetch providers");
+    const errorMessage = err.response?.statusText || err.message || "Failed to fetch providers";
+    // Return error response instead of throwing to prevent server action 500 error
+    console.error('[searchCompanyProvider] ❌ Error:', {
+      message: err.message,
+      code: err.code,
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      data: err.response?.data
+    });
+    return {Object: []};
   }
 }
 
 export async function getbarberavilabelbookingdate(data : barberAvilabelDatePayload) : Promise<{List : string[]}>{
   try {
     console.warn('📅 Fetching available booking dates:', data);
-    const response : {List : string[]} = await serverAPI.post('/search/getbarberavilabelbookingdate', data);
+    const response : {List : string[]} = await serverAPI.post('/search/getbarberavilabelbookingdate', data, {
+      // Override default 60s timeout – availability lookups can legitimately take longer
+      timeout: 0, // 0 = no timeout in axios
+    });
     console.warn('✅ Available dates response:', response);
     return response;
   } catch (err: any) {
@@ -55,7 +66,10 @@ export async function getbarberavilabelbookingdate(data : barberAvilabelDatePayl
 export async function getbarbertimeslotslist(data : barberTimesLotsListPayload) : Promise<{List : string[]}>{
   try {
     console.warn('⏰ Fetching time slots list:', data);
-    const response : {List : string[]} = await serverAPI.post('/search/getbarbertimeslotslist', data);
+    const response : {List : string[]} = await serverAPI.post('/search/getbarbertimeslotslist', data, {
+      // Override default 60s timeout – slot generation can be slow on backend
+      timeout: 0,
+    });
     console.warn('✅ Time slots response:', response);
     return response;
   } catch (err: any) {
@@ -215,50 +229,128 @@ export async function createCustomer(data: CreateCustomerPayload): Promise<Creat
 }
 
 export async function addCustomerBookings(data : SchedulerSubmitData) : Promise<{Status : number, Message : string}>{
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const timestamp = new Date().toISOString();
+  
   try {
-    console.log('[addCustomerBookings] 🔍 Sending booking data:', {
+    // Log incoming request from UI
+    console.log('[addCustomerBookings] 📥 INCOMING REQUEST FROM UI:', {
+      requestId,
+      timestamp,
+      endpoint: '/company/addcustomerbookings',
+      payload: JSON.stringify(data, null, 2),
+      payloadSummary: {
+        Name: data.Name,
+        PhoneNumber: data.PhoneNumber,
+        CountryCode: data.CountryCode,
+        Email: data.Email,
+        ServiceId: data.ServiceId,
+        CustomerId: data.CustomerId,
+        Address: data.Address,
+        CompanyUserId: data.CompanyUserId,
+        Date: data.Date,
+        TimingSlot: data.TimingSlot,
+        DateFormat: 'YYYY-MM-DD',
+        TimingSlotFormat: 'HH:MM AM/PM-HH:MM AM/PM (e.g., "09:00 AM-05:00 PM")',
+        DateLength: data.Date?.length,
+        TimingSlotLength: data.TimingSlot?.length,
+        DateType: typeof data.Date,
+        TimingSlotType: typeof data.TimingSlot
+      },
+      note: 'This is the payload received from the UI (Next.js client)'
+    });
+    
+    // Prepare payload to send to Web API backend
+    const webApiPayload = {
       Name: data.Name,
       PhoneNumber: data.PhoneNumber,
       CountryCode: data.CountryCode,
-      Email: data.Email,
+      Email: data.Email || '',
       ServiceId: data.ServiceId,
       CustomerId: data.CustomerId,
       Address: data.Address,
       CompanyUserId: data.CompanyUserId,
       Date: data.Date,
-      TimingSlot: data.TimingSlot,
-      DateFormat: 'YYYY-MM-DD',
-      TimingSlotFormat: 'HH:MM AM/PM-HH:MM AM/PM (e.g., "09:00 AM-05:00 PM")',
-      DateLength: data.Date?.length,
-      TimingSlotLength: data.TimingSlot?.length,
-      DateType: typeof data.Date,
-      TimingSlotType: typeof data.TimingSlot,
-      fullPayload: JSON.stringify(data, null, 2)
+      TimingSlot: data.TimingSlot
+    };
+    
+    // Log payload being sent to Web API backend
+    console.log('[addCustomerBookings] 📤 SENDING TO WEB API BACKEND:', {
+      requestId,
+      timestamp,
+      webApiUrl: process.env.NEXT_PUBLIC_DEV_API_URL || process.env.NEXT_PUBLIC_API_URL || 'unknown',
+      endpoint: '/company/addcustomerbookings',
+      payload: JSON.stringify(webApiPayload, null, 2),
+      payloadSummary: {
+        Name: webApiPayload.Name,
+        PhoneNumber: webApiPayload.PhoneNumber,
+        CountryCode: webApiPayload.CountryCode,
+        Email: webApiPayload.Email,
+        ServiceId: webApiPayload.ServiceId,
+        CustomerId: webApiPayload.CustomerId,
+        Address: webApiPayload.Address,
+        CompanyUserId: webApiPayload.CompanyUserId,
+        Date: webApiPayload.Date,
+        TimingSlot: webApiPayload.TimingSlot
+      },
+      note: 'This is the payload being sent to the Web API backend (ASP.NET)'
     });
     
-    const response : {Status : number, Message : string} = await serverAPI.post('/company/addcustomerbookings', data);
+    const response : {Status : number, Message : string} = await serverAPI.post('/company/addcustomerbookings', webApiPayload);
     
-    console.log('[addCustomerBookings] 📥 Response received:', {
-      Status: response.Status,
-      Message: response.Message,
-      response: response
+    // Log successful response from Web API backend
+    console.log('[addCustomerBookings] ✅ RESPONSE FROM WEB API BACKEND:', {
+      requestId,
+      timestamp,
+      status: response.Status,
+      message: response.Message,
+      response: JSON.stringify(response, null, 2),
+      responseSummary: {
+        Status: response.Status,
+        Message: response.Message
+      },
+      note: 'This is the response received from the Web API backend (ASP.NET)'
     });
     
     return {Status : response.Status, Message : response.Message};
   } catch (err: any) {
-    console.error('[addCustomerBookings] ❌ Error:', {
-      message: err.message,
-      code: err.code,
-      status: err.response?.status,
-      statusText: err.response?.statusText,
-      data: err.response?.data,
-      requestData: JSON.stringify(data, null, 2),
-      Date: data.Date,
-      TimingSlot: data.TimingSlot,
-      note: 'If error mentions DateTime, check Date and TimingSlot formats'
+    // Log detailed error information
+    const errorDetails = {
+      requestId,
+      timestamp,
+      errorType: err.name || 'Unknown',
+      errorMessage: err.message,
+      errorCode: err.code,
+      httpStatus: err.response?.status,
+      httpStatusText: err.response?.statusText,
+      webApiResponseData: err.response?.data ? JSON.stringify(err.response.data, null, 2) : 'no response data',
+      requestPayload: JSON.stringify(data, null, 2),
+      requestPayloadSummary: {
+        Name: data.Name,
+        PhoneNumber: data.PhoneNumber,
+        CountryCode: data.CountryCode,
+        ServiceId: data.ServiceId,
+        CustomerId: data.CustomerId,
+        Date: data.Date,
+        TimingSlot: data.TimingSlot
+      },
+      stack: err.stack,
+      fullError: JSON.stringify(err, Object.getOwnPropertyNames(err), 2)
+    };
+    
+    console.error('[addCustomerBookings] ❌ ERROR - REQUEST FAILED:', errorDetails);
+    
+    // Extract error message
+    const errorMessage = err.response?.data?.Message || err.response?.statusText || err.message;
+    
+    console.error('[addCustomerBookings] ❌ ERROR SUMMARY:', {
+      requestId,
+      timestamp,
+      httpStatus: err.response?.status || 500,
+      errorMessage,
+      note: 'This error occurred when calling the Web API backend. Check the detailed error log above for full payload and response details. If error mentions DateTime, check Date and TimingSlot formats.'
     });
     
-    const errorMessage = err.response?.data?.Message || err.response?.statusText || err.message;
     return {Status : err.response?.status || 500, Message : errorMessage};
   }
 }

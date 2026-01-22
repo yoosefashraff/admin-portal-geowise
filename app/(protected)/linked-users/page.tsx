@@ -44,6 +44,11 @@ export default function LinkedUsersPage() {
       return;
     }
 
+    // Log a sample provider to inspect available fields (e.g. UserId vs ProviderId)
+    if (response.List && response.List.length > 0) {
+      console.log('[LinkedUsers] Sample provider from API:', response.List[0]);
+    }
+
     setData(response.List);
     const totalPagesRes = Math.ceil(response.TotalCount / 10);
     setCurrentPage(currentPage > totalPagesRes ? totalPagesRes : currentPage);

@@ -95,10 +95,7 @@ const MapZoneDrawer: React.FC<MapZoneDrawerProps> = ({
       } else {
         isGoogleMapsLoading = true;
         const script = document.createElement('script');
-        // Strip quotes if present (common Vercel/Netlify env var issue)
-        const rawKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-        const mapKey = rawKey.replace(/^["']|["']$/g, '').trim();
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${mapKey}&libraries=drawing,geometry`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=drawing,geometry`;
         script.async = true;
         script.defer = true;
         script.onload = () => {
@@ -141,27 +138,31 @@ const MapZoneDrawer: React.FC<MapZoneDrawerProps> = ({
       cameraControl: false
     });
 
-    if (enableDrawing) {
-      const drawingMgr = new google.maps.drawing.DrawingManager({
-        drawingControl: false,
-        polygonOptions: {
-          strokeColor: '#DC6803',
-          strokeOpacity: 1,
-          strokeWeight: 2,
-          fillColor: '#DC6803',
-          fillOpacity: 0.3,
-          editable: true,
-          draggable: true,
-        },
-      });
+    if (enableDrawing && window.google?.maps?.drawing?.DrawingManager) {
+      try {
+        const drawingMgr = new window.google.maps.drawing.DrawingManager({
+          drawingControl: false,
+          polygonOptions: {
+            strokeColor: '#DC6803',
+            strokeOpacity: 1,
+            strokeWeight: 2,
+            fillColor: '#DC6803',
+            fillOpacity: 0.3,
+            editable: true,
+            draggable: true,
+          },
+        });
 
-      drawingMgr.setMap(mapInstance);
+        drawingMgr.setMap(mapInstance);
 
-      google.maps.event.addListener(drawingMgr, 'polygoncomplete', (polygon: google.maps.Polygon) => {
-        handlePolygonComplete(polygon, mapInstance);
-      });
+        google.maps.event.addListener(drawingMgr, 'polygoncomplete', (polygon: google.maps.Polygon) => {
+          handlePolygonComplete(polygon, mapInstance);
+        });
 
-      setDrawingManager(drawingMgr);
+        setDrawingManager(drawingMgr);
+      } catch (error) {
+        console.error('Failed to initialize DrawingManager:', error);
+      }
     }
 
     setMap(mapInstance);

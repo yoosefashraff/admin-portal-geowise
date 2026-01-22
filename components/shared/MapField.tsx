@@ -23,14 +23,18 @@ export default function MapField({value, onChange}: MapFieldProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const onChangeRef = useRef(onChange);
 
-  // Strip quotes if present (common Vercel/Netlify env var issue)
-  const rawKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyAq2Vf7Ss-yLruim9i_vog14LwVGPBmt_g';
-  const mapKey = rawKey.replace(/^["']|["']$/g, '').trim();
+  // Keep onChange ref up to date without causing re-renders
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  const mapKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyAq2Vf7Ss-yLruim9i_vog14LwVGPBmt_g';
 
   // Initialize autocomplete separately
-  const initAutocomplete = (map: google.maps.Map) => {
-    if (!searchInputRef.current || autocompleteRef.current) return;
+  const initAutocomplete = () => {
+    if (!searchInputRef.current || autocompleteRef.current || !mapInstance) return;
     
     if (window.google?.maps?.places?.Autocomplete) {
       try {
@@ -44,16 +48,22 @@ export default function MapField({value, onChange}: MapFieldProps) {
         autocompleteInstance.addListener('place_changed', () => {
           const place = autocompleteInstance.getPlace();
 
-          if (!place.geometry || !place.geometry.location) {
+          if (!place.geometry || !place.geometry.location || !mapInstance) {
             return;
           }
 
+          const lat = place.geometry.location.lat();
+          const lng = place.geometry.location.lng();
+
           // Update map position
-          map.setCenter(place.geometry.location);
-          map.setZoom(15);
+          mapInstance.setCenter(place.geometry.location);
+          mapInstance.setZoom(15);
 
           // Update search query
           setSearchQuery(place.formatted_address || place.name);
+
+          // Update parent component with new location (this was missing!)
+          onChangeRef.current({ lat, lng });
         });
 
         autocompleteRef.current = autocompleteInstance;
@@ -63,12 +73,12 @@ export default function MapField({value, onChange}: MapFieldProps) {
     }
   };
 
-  // Initialize Google Maps
+  // Initialize Google Maps (only once)
   useEffect(() => {
     const initMap = () => {
-      if (!window.google || !window.google.maps || !mapRef.current) return;
+      if (!window.google || !window.google.maps || !mapRef.current || mapInstance) return;
       
-      // Create map
+      // Create map only once
       const newMapInstance = new window.google.maps.Map(mapRef.current, {
         center: {lat: value?.lat || 36.156264, lng: value?.lng || -86.789491 },
         zoom: 13,
@@ -90,17 +100,14 @@ export default function MapField({value, onChange}: MapFieldProps) {
             if (status === 'OK' && results && results[0]) {
               setSearchQuery(results[0].formatted_address);
 
-              // change data
-              onChange({ lat: results[0].geometry.location.lat(), lng: results[0].geometry.location.lng() });
+              // Use ref to avoid dependency issues - prevents map reloading
+              onChangeRef.current({ lat: results[0].geometry.location.lat(), lng: results[0].geometry.location.lng() });
             }
           });
         }
       });
 
       setMapInstance(newMapInstance);
-
-      // Try to initialize autocomplete if places library is already loaded
-      initAutocomplete(newMapInstance);
     };
 
     // Load Google Maps API
@@ -156,7 +163,22 @@ export default function MapField({value, onChange}: MapFieldProps) {
 
       return () => clearInterval(checkInterval);
     }
-  }, [value, onChange]);
+  }, [value, mapInstance]); // Only depend on value and mapInstance, not onChange (use ref instead)
+  
+  // Update map center when value changes (if map already exists) - prevents full re-initialization
+  useEffect(() => {
+    if (mapInstance && value?.lat && value?.lng) {
+      const currentCenter = mapInstance.getCenter();
+      if (currentCenter) {
+        const currentLat = currentCenter.lat();
+        const currentLng = currentCenter.lng();
+        // Only update if center actually changed (avoid unnecessary updates)
+        if (Math.abs(currentLat - value.lat) > 0.0001 || Math.abs(currentLng - value.lng) > 0.0001) {
+          mapInstance.setCenter({ lat: value.lat, lng: value.lng });
+        }
+      }
+    }
+  }, [value?.lat, value?.lng, mapInstance]);
 
   // Separate effect to initialize autocomplete when places library becomes available
   useEffect(() => {
@@ -164,7 +186,7 @@ export default function MapField({value, onChange}: MapFieldProps) {
       const checkPlaces = setInterval(() => {
         if (window.google?.maps?.places?.Autocomplete) {
           clearInterval(checkPlaces);
-          initAutocomplete(mapInstance);
+          initAutocomplete();
         }
       }, 100);
 
