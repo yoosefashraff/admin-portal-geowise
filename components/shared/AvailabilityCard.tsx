@@ -1,7 +1,7 @@
 import {Switch} from "@/components/ui/switch";
 import {Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue} from "@/components/ui/select";
 import {MoveRight, Plus, X} from "lucide-react";
-import React, {useState} from "react";
+import React, {useState, useEffect} from "react";
 import { cn } from "@/lib/utils";
 
 interface BreakTime {
@@ -10,13 +10,22 @@ interface BreakTime {
   end: string;
 }
 
+export interface AvailabilityDayData {
+  isAvailable: boolean;
+  startTime: string;
+  endTime: string;
+  breakTimes: BreakTime[];
+}
+
 interface availabilityCardProps{
   dayOfWeek: string,
   isAvailable?: boolean,
   startTime?: string,
   endTime?: string,
   breakStart?: string,
-  breakEnd?: string
+  breakEnd?: string,
+  value?: AvailabilityDayData,
+  onChange?: (data: AvailabilityDayData) => void
 }
 
 // Generate time options from 6:00 AM to 10:00 PM in 30-minute intervals
@@ -50,18 +59,61 @@ export default function AvailabilityCard({
   startTime = '09:00',
   endTime = '17:00',
   breakStart,
-  breakEnd
+  breakEnd,
+  value,
+  onChange
 } : availabilityCardProps){
-  const [available, setAvailable] = useState<boolean>(isAvailable);
-  const [selectedStartTime, setSelectedStartTime] = useState<string>(startTime);
-  const [selectedEndTime, setSelectedEndTime] = useState<string>(endTime);
+  // Use controlled value if provided, otherwise use internal state
+  const isControlled = value !== undefined && onChange !== undefined;
+  
+  const [available, setAvailable] = useState<boolean>(value?.isAvailable ?? isAvailable);
+  const [selectedStartTime, setSelectedStartTime] = useState<string>(value?.startTime ?? startTime);
+  const [selectedEndTime, setSelectedEndTime] = useState<string>(value?.endTime ?? endTime);
   const [breakTimes, setBreakTimes] = useState<BreakTime[]>(() => {
-    // Initialize with provided break time if available
+    if (value?.breakTimes) return value.breakTimes;
     if (breakStart && breakEnd) {
       return [{ id: '1', start: breakStart, end: breakEnd }];
     }
     return [];
   });
+
+  // Sync with controlled value when it changes
+  React.useEffect(() => {
+    if (isControlled && value) {
+      setAvailable(value.isAvailable);
+      setSelectedStartTime(value.startTime);
+      setSelectedEndTime(value.endTime);
+      setBreakTimes(value.breakTimes);
+    }
+  }, [value, isControlled]);
+
+  // Notify parent of changes
+  const notifyChange = (updates: Partial<AvailabilityDayData>) => {
+    if (onChange) {
+      onChange({
+        isAvailable: available,
+        startTime: selectedStartTime,
+        endTime: selectedEndTime,
+        breakTimes: breakTimes,
+        ...updates
+      });
+    }
+  };
+
+  const handleAvailableChange = (checked: boolean) => {
+    setAvailable(checked);
+    notifyChange({ isAvailable: checked });
+  };
+
+  const handleStartTimeChange = (time: string) => {
+    setSelectedStartTime(time);
+    notifyChange({ startTime: time });
+  };
+
+  const handleEndTimeChange = (time: string) => {
+    setSelectedEndTime(time);
+    notifyChange({ endTime: time });
+  };
 
   const handleAddBreak = () => {
     const newBreak: BreakTime = {
@@ -69,17 +121,23 @@ export default function AvailabilityCard({
       start: '12:00',
       end: '13:00',
     };
-    setBreakTimes([...breakTimes, newBreak]);
+    const updated = [...breakTimes, newBreak];
+    setBreakTimes(updated);
+    notifyChange({ breakTimes: updated });
   };
 
   const handleRemoveBreak = (id: string) => {
-    setBreakTimes(breakTimes.filter(bt => bt.id !== id));
+    const updated = breakTimes.filter(bt => bt.id !== id);
+    setBreakTimes(updated);
+    notifyChange({ breakTimes: updated });
   };
 
   const handleBreakTimeChange = (id: string, field: 'start' | 'end', value: string) => {
-    setBreakTimes(breakTimes.map(bt => 
+    const updated = breakTimes.map(bt => 
       bt.id === id ? { ...bt, [field]: value } : bt
-    ));
+    );
+    setBreakTimes(updated);
+    notifyChange({ breakTimes: updated });
   };
 
   const formatTimeDisplay = (time24: string) => {
@@ -93,7 +151,7 @@ export default function AvailabilityCard({
       className="bg-white rounded-xl"
       style={{
         width: '312.67px',
-        height: available ? '214px' : '89px',
+        // Let height grow with content instead of being fixed
         paddingTop: '16px',
         paddingBottom: '16px',
         paddingLeft: '24px',
@@ -101,12 +159,12 @@ export default function AvailabilityCard({
         boxShadow: '0px 4px 24px -2px rgba(16, 24, 40, 0.01), 0px 2px 24px -2px rgba(16, 24, 40, 0.06)'
       }}
     >
-      <div className="flex flex-col h-full" style={{ gap: '12px' }}>
+      <div className="flex flex-col" style={{ gap: '12px' }}>
         <div className="flex items-center justify-between">
           <div className="font-medium text-gray-900 text-base">{dayOfWeek}</div>
           <Switch 
             checked={available} 
-            onCheckedChange={setAvailable}
+            onCheckedChange={handleAvailableChange}
             className="h-5 data-[state=checked]:bg-green-600" 
           />
         </div>
@@ -117,7 +175,7 @@ export default function AvailabilityCard({
             <div className="flex items-center gap-2">
             <Select 
               value={selectedStartTime} 
-              onValueChange={setSelectedStartTime}
+              onValueChange={handleStartTimeChange}
             >
               <SelectTrigger className="flex-1 min-w-[93px] h-11 data-[placeholder]:text-gray-900 border-gray-300">
                 <SelectValue placeholder="Time">
@@ -137,7 +195,7 @@ export default function AvailabilityCard({
             <MoveRight className="w-4 h-4 text-gray-700 flex-shrink-0" />
             <Select 
               value={selectedEndTime} 
-              onValueChange={setSelectedEndTime}
+              onValueChange={handleEndTimeChange}
             >
               <SelectTrigger className="flex-1 min-w-[93px] h-11 data-[placeholder]:text-gray-900 border-gray-300">
                 <SelectValue placeholder="Time">
@@ -214,16 +272,14 @@ export default function AvailabilityCard({
                         </SelectContent>
                       </Select>
                     </div>
-                    {breakTimes.length > 1 && (
-                      <button
-                        onClick={() => handleRemoveBreak(breakTime.id)}
-                        type="button"
-                        className="p-1.5 hover:bg-gray-100 rounded transition-colors ml-2"
-                        aria-label="Remove break time"
-                      >
-                        <X className="w-4 h-4 text-gray-500" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleRemoveBreak(breakTime.id)}
+                      type="button"
+                      className="p-1.5 hover:bg-gray-100 rounded transition-colors ml-2"
+                      aria-label="Remove break time"
+                    >
+                      <X className="w-4 h-4 text-gray-500" />
+                    </button>
                   </div>
                 ))}
               </div>

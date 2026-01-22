@@ -240,7 +240,7 @@ export default function AssignClientPage(){
 										Previous
 									</Link>
 								</Button>
-								<Button className="ml-3 cursor-pointer" onClick={() => handleBooking(null)} >Next</Button>
+								<Button className="ml-3 cursor-pointer" onClick={() => handleBooking(null)} >Submit</Button>
 							</div>
 						</div>
 					</GWCard>

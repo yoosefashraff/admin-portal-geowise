@@ -30,23 +30,27 @@ export default function ProviderItem({ provider, index, dataLength, handleDelete
             }`}
         >
             <td className="py-4 px-6 text-sm font-medium text-gray-900">
-                <Link href={`/linked-users/${provider.ProviderId}/edit`} >
-									<div className="flex items-center gap-3">
-										<Image
-											src={provider.ProfileImage}
-											alt={provider.ProviderName}
-											width={48}
-											height={48}
-											className="w-12 h-12 rounded-full object-cover"
-										/>
-										<div className="flex-1">
-											<p className="text-sm font-medium text-gray-900">
-												{provider.ProviderName}
-											</p>
-										</div>	
-									</div>
-									
-								</Link>
+              <Link href={`/linked-users/${provider.ProviderId}/edit`} className="block">
+                <div className="flex items-center gap-3">
+                  <Image
+                    src={provider.ProfileImage || '/images/avatar.png'}
+                    alt={provider.ProviderName}
+                    width={48}
+                    height={48}
+                    className="w-12 h-12 rounded-full object-cover"
+                    unoptimized
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.src = '/images/avatar.png';
+                    }}
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">
+                      {provider.ProviderName}
+                    </p>
+                  </div>	
+                </div>
+              </Link>
             </td>
             <td className="py-4 px-6 text-sm text-gray-500">
               {provider.CreationDate ? dayjs(provider.CreationDate).format('MMM DD, YYYY') : ''}
@@ -63,23 +67,23 @@ export default function ProviderItem({ provider, index, dataLength, handleDelete
             </td>
             <td className="py-4 px-6">
 							<DropdownMenu modal={false}>
-									<DropdownMenuTrigger asChild>
+								<DropdownMenuTrigger asChild>
 									<button className="text-gray-500 hover:text-gray-600 transition-colors cursor-pointer">
-											<MoreVertical className="w-5 h-5" />
+										<MoreVertical className="w-5 h-5" />
 									</button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent className="w-40" align="end">
+								</DropdownMenuTrigger>
+								<DropdownMenuContent className="w-40" align="end">
 									<DropdownMenuGroup>
-											<DropdownMenuItem>
-													<Link className='w-full' href={`/linked-users/${provider.ProviderId}/edit`}>
-															Edit
-													</Link>
-											</DropdownMenuItem>
-											<DropdownMenuItem onClick={()=>setShowDeleteDialog(true)}>
-													Delete
-											</DropdownMenuItem>
+										<DropdownMenuItem asChild>
+											<Link className="w-full" href={`/linked-users/${provider.ProviderId}/edit`}>
+												Edit
+											</Link>
+										</DropdownMenuItem>
+										<DropdownMenuItem onClick={() => setShowDeleteDialog(true)}>
+											Delete
+										</DropdownMenuItem>
 									</DropdownMenuGroup>
-									</DropdownMenuContent>
+								</DropdownMenuContent>
 							</DropdownMenu>
 							<Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
 									<DialogContent className="sm:max-w-[425px]">

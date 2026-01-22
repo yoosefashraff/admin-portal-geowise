@@ -38,7 +38,7 @@ export function LoginForm() {
       toast.success('Login successful!');
       // Small delay to ensure state is updated before redirect
       await new Promise(resolve => setTimeout(resolve, 200));
-      router.push('/dashboard');
+      router.push('/calendar');
     } catch (error: any) {
       console.error('Login error:', error);
       const errorMessage = error?.message || 'Login failed. Please check your credentials and try again.';

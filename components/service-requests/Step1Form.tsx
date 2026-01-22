@@ -58,9 +58,7 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
   // Refs for Google Maps autocomplete
   const locationInputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
-  // Strip quotes if present (common Vercel/Netlify env var issue)
-  const rawKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyAq2Vf7Ss-yLruim9i_vog14LwVGPBmt_g';
-  const mapKey = rawKey.replace(/^["']|["']$/g, '').trim();
+  const mapKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyAq2Vf7Ss-yLruim9i_vog14LwVGPBmt_g';
   
   // Ref for name dropdown to handle click outside
   const nameDropdownRef = useRef<HTMLDivElement>(null);
@@ -614,6 +612,144 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)}>
+        {/* Phone Number */}
+        <FormField
+          control={form.control}
+          name="phoneNumber"
+          render={({ field, fieldState }) => (
+            <FormItem className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 mb-4 border-b border-gray-200">
+              <div className="flex items-start">
+                <FormLabel className="font-medium !text-gray-900">
+                  Number <span className="text-red-500">*</span>
+                </FormLabel>
+              </div>
+              <div className="flex flex-col gap-2">
+                <FormControl>
+                  <div className={cn(
+                    "flex items-center w-full border rounded-md px-4 h-[40px] bg-white text-gray-700 focus-within:ring-2 focus-within:ring-blue-500",
+                    fieldState.error ? "border-destructive focus-within:ring-destructive/20" : "border-gray-300"
+                  )}>
+                    <FormField
+                      control={form.control}
+                      name="countryCode"
+                      render={({ field: countryField }) => (
+                        <Popover open={countryCodeOpen} onOpenChange={setCountryCodeOpen}>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              className="h-auto w-auto min-w-[60px] border-0 bg-transparent p-0 pr-2 mr-2 focus:ring-0 focus-visible:ring-0 shadow-none hover:bg-transparent flex items-center gap-1.5 text-sm font-medium text-gray-700"
+                            >
+                              <span className="font-semibold">{countryField.value || 'US'}</span>
+                              <span className="text-gray-500">+{getCallingCode(countryField.value || 'US').replace('+', '')}</span>
+                              <ChevronsUpDown className="h-3 w-3 text-gray-400" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[300px] p-0" align="start">
+                            <Command>
+                              <CommandInput
+                                placeholder="Search country or code..."
+                                value={countrySearchQuery}
+                                onValueChange={setCountrySearchQuery}
+                              />
+                              <CommandList>
+                                <CommandEmpty>No country found.</CommandEmpty>
+                                <CommandGroup>
+                                  {filteredCountries.map((countryCode) => {
+                              const callingCode = getCallingCode(countryCode);
+                                    const countryName = getCountryName(countryCode);
+                                    const countryCustomers = customers.filter(
+                                      (c) => c.CountryCode === countryCode && c.Contact
+                                    );
+                                    
+                              return (
+                                      <CommandItem
+                                        key={countryCode}
+                                        value={`${countryCode} ${countryName} ${callingCode}`}
+                                        onSelect={() => {
+                                          countryField.onChange(countryCode);
+                                          form.setValue('countryCode', countryCode);
+                                          setCountryCodeOpen(false);
+                                          setCountrySearchQuery('');
+                                          
+                                          // Auto-fill phone if there's only one customer for this country
+                                          if (countryCustomers.length === 1 && !form.getValues('phoneNumber')) {
+                                            form.setValue('phoneNumber', countryCustomers[0].Contact || '');
+                                          }
+                                        }}
+                                        className="cursor-pointer"
+                                      >
+                                        <div className="flex items-center justify-between w-full gap-2">
+                                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                                            <span className="font-semibold text-gray-900 min-w-[35px]">
+                                              {countryCode}
+                                            </span>
+                                            <span className="text-gray-600 text-sm truncate">
+                                              {countryName}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-2 flex-shrink-0">
+                                            <span className="text-gray-500 text-sm">
+                                  +{callingCode.replace('+', '')}
+                                            </span>
+                                            {countryCustomers.length > 0 && (
+                                              <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                                                {countryCustomers.length}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </CommandItem>
+                              );
+                            })}
+                                </CommandGroup>
+                                {countryCodeValue && customersWithPhoneForCountry.length > 0 && (
+                                  <>
+                                    <CommandSeparator />
+                                    <CommandGroup heading="Phone numbers for this country">
+                                      {customersWithPhoneForCountry.slice(0, 5).map((customer) => (
+                                        <CommandItem
+                                          key={customer.Id}
+                                          onSelect={() => {
+                                            if (customer.Contact) {
+                                              form.setValue('phoneNumber', customer.Contact);
+                                            }
+                                            setCountryCodeOpen(false);
+                                          }}
+                                          className="cursor-pointer"
+                                        >
+                                          <div className="flex items-center gap-2 w-full">
+                                            <span className="text-sm text-gray-600 truncate">
+                                              {customer.Name}
+                                            </span>
+                                            <span className="text-sm text-gray-500 ml-auto">
+                                              {customer.Contact}
+                                            </span>
+                                          </div>
+                                        </CommandItem>
+                                      ))}
+                                    </CommandGroup>
+                                  </>
+                                )}
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    />
+                    <input
+                      type="tel"
+                      {...field}
+                      placeholder="(555) 000-0000"
+                      className="flex-1 bg-transparent outline-none text-gray-700 text-sm"
+                    />
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </div>
+            </FormItem>
+          )}
+        />
+
         {/* Name */}
         <FormField
           control={form.control}
@@ -794,144 +930,6 @@ export default function Step1Form({ initialData, onNext }: Step1FormProps) {
                     ℹ New customer will be created
                   </p>
                 )}
-              </div>
-            </FormItem>
-          )}
-        />
-
-        {/* Phone Number */}
-        <FormField
-          control={form.control}
-          name="phoneNumber"
-          render={({ field, fieldState }) => (
-            <FormItem className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 mb-4 border-b border-gray-200">
-              <div className="flex items-start">
-                <FormLabel className="font-medium !text-gray-900">
-                  Number <span className="text-red-500">*</span>
-                </FormLabel>
-              </div>
-              <div className="flex flex-col gap-2">
-                <FormControl>
-                  <div className={cn(
-                    "flex items-center w-full border rounded-md px-4 h-[40px] bg-white text-gray-700 focus-within:ring-2 focus-within:ring-blue-500",
-                    fieldState.error ? "border-destructive focus-within:ring-destructive/20" : "border-gray-300"
-                  )}>
-                    <FormField
-                      control={form.control}
-                      name="countryCode"
-                      render={({ field: countryField }) => (
-                        <Popover open={countryCodeOpen} onOpenChange={setCountryCodeOpen}>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className="h-auto w-auto min-w-[60px] border-0 bg-transparent p-0 pr-2 mr-2 focus:ring-0 focus-visible:ring-0 shadow-none hover:bg-transparent flex items-center gap-1.5 text-sm font-medium text-gray-700"
-                            >
-                              <span className="font-semibold">{countryField.value || 'US'}</span>
-                              <span className="text-gray-500">+{getCallingCode(countryField.value || 'US').replace('+', '')}</span>
-                              <ChevronsUpDown className="h-3 w-3 text-gray-400" />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-[300px] p-0" align="start">
-                            <Command>
-                              <CommandInput
-                                placeholder="Search country or code..."
-                                value={countrySearchQuery}
-                                onValueChange={setCountrySearchQuery}
-                              />
-                              <CommandList>
-                                <CommandEmpty>No country found.</CommandEmpty>
-                                <CommandGroup>
-                                  {filteredCountries.map((countryCode) => {
-                              const callingCode = getCallingCode(countryCode);
-                                    const countryName = getCountryName(countryCode);
-                                    const countryCustomers = customers.filter(
-                                      (c) => c.CountryCode === countryCode && c.Contact
-                                    );
-                                    
-                              return (
-                                      <CommandItem
-                                        key={countryCode}
-                                        value={`${countryCode} ${countryName} ${callingCode}`}
-                                        onSelect={() => {
-                                          countryField.onChange(countryCode);
-                                          form.setValue('countryCode', countryCode);
-                                          setCountryCodeOpen(false);
-                                          setCountrySearchQuery('');
-                                          
-                                          // Auto-fill phone if there's only one customer for this country
-                                          if (countryCustomers.length === 1 && !form.getValues('phoneNumber')) {
-                                            form.setValue('phoneNumber', countryCustomers[0].Contact || '');
-                                          }
-                                        }}
-                                        className="cursor-pointer"
-                                      >
-                                        <div className="flex items-center justify-between w-full gap-2">
-                                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                                            <span className="font-semibold text-gray-900 min-w-[35px]">
-                                              {countryCode}
-                                            </span>
-                                            <span className="text-gray-600 text-sm truncate">
-                                              {countryName}
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center gap-2 flex-shrink-0">
-                                            <span className="text-gray-500 text-sm">
-                                  +{callingCode.replace('+', '')}
-                                            </span>
-                                            {countryCustomers.length > 0 && (
-                                              <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
-                                                {countryCustomers.length}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </CommandItem>
-                              );
-                            })}
-                                </CommandGroup>
-                                {countryCodeValue && customersWithPhoneForCountry.length > 0 && (
-                                  <>
-                                    <CommandSeparator />
-                                    <CommandGroup heading="Phone numbers for this country">
-                                      {customersWithPhoneForCountry.slice(0, 5).map((customer) => (
-                                        <CommandItem
-                                          key={customer.Id}
-                                          onSelect={() => {
-                                            if (customer.Contact) {
-                                              form.setValue('phoneNumber', customer.Contact);
-                                            }
-                                            setCountryCodeOpen(false);
-                                          }}
-                                          className="cursor-pointer"
-                                        >
-                                          <div className="flex items-center gap-2 w-full">
-                                            <span className="text-sm text-gray-600 truncate">
-                                              {customer.Name}
-                                            </span>
-                                            <span className="text-sm text-gray-500 ml-auto">
-                                              {customer.Contact}
-                                            </span>
-                                          </div>
-                                        </CommandItem>
-                                      ))}
-                                    </CommandGroup>
-                                  </>
-                                )}
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                      )}
-                    />
-                    <input
-                      type="tel"
-                      {...field}
-                      placeholder="(555) 000-0000"
-                      className="flex-1 bg-transparent outline-none text-gray-700 text-sm"
-                    />
-                  </div>
-                </FormControl>
-                <FormMessage />
               </div>
             </FormItem>
           )}

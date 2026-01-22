@@ -79,11 +79,6 @@ async function generateBookingsClientSide(creditIds: number[]): Promise<{
     };
   }
 
-  
-  // Upgrade to HTTPS if needed (required for Netlify HTTPS deployment)
-
-  // Verify we're using dev environment
-
   // CRITICAL: Log where bookings will be created (same as server-side)
   console.warn('⚠️ AUTO-DISPATCH DATA STORAGE LOCATION:', {
     environment: 'DEV (Testing Environment)',

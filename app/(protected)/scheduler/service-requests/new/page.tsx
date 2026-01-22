@@ -311,7 +311,7 @@ export default function NewServiceRequestPage() {
         return;
       }
 
-      // Get preferred staff provider IDs - REQUIRED for booking
+      // Get preferred staff provider IDs - OPTIONAL in UI
       // Step3Form stores provider IDs as strings directly (e.g., ["123", "456"])
       let providerId = '0';
       if (finalData.preferredStaff && finalData.preferredStaff.length > 0) {
@@ -320,12 +320,8 @@ export default function NewServiceRequestPage() {
         providerId = finalData.preferredStaff[0].toString();
       }
       
-      // Validate ProviderId is set (required for calendar booking API)
-      if (!providerId || providerId === '0' || providerId.trim() === '') {
-        toast.error('Please select a provider/staff member in Step 3. Provider is required for booking.');
-        setIsSubmitting(false);
-        return;
-      }
+      // Note: preferredStaff is optional - if not provided, providerId will be '0'
+      // Backend API will handle this case
 
       // Format date and time - use EXACT same approach as working EditBookingDialog
       // EditBookingDialog line 60: const today = new Date().toISOString().split('T')[0];

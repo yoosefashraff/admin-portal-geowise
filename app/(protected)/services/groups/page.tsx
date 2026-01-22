@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import { DashboardHeader } from '@/components/layout/DashboardHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  CircleQuestionMark,
   PlusIcon,
   Search
 } from 'lucide-react';
@@ -12,27 +11,25 @@ import { Input } from '@/components/ui/input';
 import "react-phone-number-input/style.css";
 import { Separator } from '@radix-ui/react-select';
 import Link from "next/link";
-import { CompanyService } from '@/lib/types/service.types';
 import { User } from '@/lib/types/auth.types';
 import { useAuthStore } from '@/lib/store/authStore';
-import { deleteCompanyService, getServicesForCompany } from '@/lib/actions/service.actions';
 import { toast } from 'sonner';
-import CompanyServiceSkeleton from '@/components/skeleton/CompanyServiceSkeleton';
 import { Skeleton } from '@/components/ui/skeleton';
 import CustomPagination from '@/components/shared/CustomPagination';
-import CompanyServiceItem from '@/components/shared/CompanyServiceItem';
 import { ButtonGroup } from '@/components/ui/button-group';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
 import ServiceGroupSkeleton from '@/components/skeleton/ServiceGroupSkeleton';
 import ServiceGroupItem from '@/components/shared/ServiceGroupItem';
+import { ServiceGroup } from '@/lib/types/serviceGroup.types';
+import { deleteServiceGroup, getServiceGroupList, linkServicesToGroup } from '@/lib/actions/serviceGroup.actions';
 
 export default function ServiceGroupsPage() {
   const [value, setValue] = useState<string>();
   const [searchQuery, setSearchQuery] = useState('');
   const {user} = useAuthStore();
-  const [data, setData] = useState<CompanyService[]>([]);
-  const [filteredData, setFilteredData] = useState<CompanyService[]>([]);
+  const [data, setData] = useState<ServiceGroup[]>([]);
+  const [filteredData, setFilteredData] = useState<ServiceGroup[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
@@ -40,19 +37,19 @@ export default function ServiceGroupsPage() {
 
   async function load(user: User) {
     setLoading(true);
-    const response = await getServicesForCompany({
-      CompanyAdminId: user.UserID,
-      PageNo: currentPage,
-      RecordsPerPage: 10
-    });
+    const response = await getServiceGroupList();
 
-    if(response.Status !== 201){
-      toast.error(response.Message);
+    if(response.Status !== 201 || !response.List){
+      toast.error(response.Message || 'Failed to load service groups');
+      setData([]);
+      setFilteredData([]);
+      setTotalPages(1);
+      setLoading(false);
       return;
     }
 
     setData(response.List);
-    const totalPagesRes = Math.ceil(response.TotalCount / 10);
+    const totalPagesRes = Math.ceil((response.List.length || 0) / 10) || 1;
     setCurrentPage(currentPage > totalPagesRes ? totalPagesRes : currentPage);
     setTotalPages(totalPagesRes);
     setLoading(false);
@@ -72,23 +69,44 @@ export default function ServiceGroupsPage() {
     let result = [...data];
 
     if (searchQuery) {
-      result = result.filter(service =>
-        service.ServiceName.toLowerCase().includes(searchQuery.toLowerCase())
+      result = result.filter(group =>
+        group.Name.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
     setFilteredData(result);
   }, [searchQuery]);
 
-  const handleDeleteItem = async (serviceId: number) => {
-    const response = await deleteCompanyService({
-      serviceId
-    });
+  const handleDeleteItem = async (groupId: number) => {
+    let response = await deleteServiceGroup(groupId);
 
-    if(response.Status === 201){
-      toast.success(response.Message);
+    // If deletion fails due to linked services, automatically unlink all services and retry
+    if (response.Status !== 201 && response.Message?.toLowerCase().includes('linked') && response.Message?.toLowerCase().includes('service')) {
+      console.log('[handleDeleteItem] 🔗 Detected linked services error, unlinking all services...');
+      
+      try {
+        // Unlink all services by calling linkServicesToGroup with empty array
+        const unlinkResponse = await linkServicesToGroup({
+          groupId: groupId,
+          serviceIds: []
+        });
+        
+        if (unlinkResponse.Status === 201 || unlinkResponse.Status === 200) {
+          console.log('[handleDeleteItem] ✅ Successfully unlinked all services, retrying deletion...');
+          // Retry deletion after unlinking
+          response = await deleteServiceGroup(groupId);
+        } else {
+          console.warn('[handleDeleteItem] ⚠️ Failed to unlink services:', unlinkResponse.Message);
+        }
+      } catch (unlinkError: any) {
+        console.error('[handleDeleteItem] ❌ Error unlinking services:', unlinkError);
+      }
+    }
+
+    if(response.Status === 201 || response.Status === 200){
+      toast.success(response.Message || 'Service group deleted');
       load(user as User);
     }else{
-      toast.error(response.Message);
+      toast.error(response.Message || 'Failed to delete service group');
     }
   };
 
@@ -146,10 +164,10 @@ export default function ServiceGroupsPage() {
                   Array.from({ length: 10 }).map((_, i) => (
                     <ServiceGroupSkeleton key={i} />
                   ))
-                ) : filteredData.map((service, index) => (
+                ) : filteredData.map((group, index) => (
                   <ServiceGroupItem 
-                    key={service.Id} 
-                    service={service} 
+                    key={group.Id} 
+                    group={group} 
                     index={index} 
                     dataLength={filteredData.length} 
                     handleDeleteItem={handleDeleteItem}

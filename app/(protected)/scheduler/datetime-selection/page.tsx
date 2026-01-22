@@ -21,7 +21,6 @@ import { useAuthStore } from "@/lib/store/authStore";
 import { useRouter } from "next/navigation";
 import { User } from "@/lib/types/auth.types";
 import { MonthGroup, SchedulerData } from "@/lib/types/scheduler.types";
-import { apiClient } from "@/lib/api/axios-instance";
 import Link from "next/link";
 import dayjs from "dayjs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -80,8 +79,8 @@ export default function DateTimeSelectPage() {
         setLoading(true);
       const today = dayjs().format("YYYY-MM-DD");
       const sixMonthsLater = dayjs().add(6, "month").format("YYYY-MM-DD");
-        const response : {List : string[]} = await apiClient.post('/search/getbarberavilabelbookingdate',
-        {
+        const { getbarberavilabelbookingdate } = await import('@/lib/actions/scheduler.actions');
+        const response : {List : string[]} = await getbarberavilabelbookingdate({
           BarberId: provider ? JSON.parse(provider).ProviderId : 0,
           FromDate: today,
           ToDate: sixMonthsLater,
@@ -89,8 +88,7 @@ export default function DateTimeSelectPage() {
           AssociationType: 1,
           CompanyAdminId: user.UserID,
           TimeZone: timeZone || 'Europe/London'
-        }
-      );
+        });
 
       if(!response?.List || response.List.length === 0){
         setMonthGroup([]);
@@ -150,8 +148,8 @@ export default function DateTimeSelectPage() {
             return;
         }
 
-          const response : {List : string[]} = await apiClient.post('/search/getbarbertimeslotslist',
-          {
+          const { getbarbertimeslotslist } = await import('@/lib/actions/scheduler.actions');
+          const response : {List : string[]} = await getbarbertimeslotslist({
             BarberId: provider ? JSON.parse(provider).ProviderId : 0,
             Date: selectedDate || dayjs().format("YYYY-MM-DD"),
             BookingType: 2,
@@ -161,8 +159,7 @@ export default function DateTimeSelectPage() {
             AssociationType: 1,
             CompanyAdminId: user?.UserID ?? 0,
             TimeZone: timeZone || 'Europe/London'
-          }
-        );
+          });
         if(!response?.List || response.List.length === 0){
           setTimeSlots([]);
           setTimeLoading(false);
