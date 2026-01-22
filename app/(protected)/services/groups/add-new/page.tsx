@@ -15,12 +15,11 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuthStore } from '@/lib/store/authStore';
-import { addServices } from '@/lib/actions/scheduler.actions';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { CurrencyItem, getAllCurrencyCodes, getCurrencies } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 import SelectServicesField from '@/components/shared/SelectServicesField';
+import { addServiceGroup, linkServicesToGroup } from '@/lib/actions/serviceGroup.actions';
 
 const formSchema = z.object({
   ServiceGroupName: z.string().min(1, 'Service name is required'),
@@ -44,11 +43,81 @@ export default function AddNewServiceGroup() {
   const handleSubmit = async (values: z.infer<typeof formSchema>) => {
     setLoading(true);
 
-    console.log(values);
-    toast.success('Service group updated successfully');
+    try {
+      console.log('[AddNewServiceGroup] 🔄 Creating service group...', {
+        name: values.ServiceGroupName,
+        serviceIds: values.ServiceIds
+      });
 
-    setLoading(false);
-    // router.push('/services/groups');
+      // First, create the service group
+      const addResponse = await addServiceGroup({
+        Name: values.ServiceGroupName,
+        IsActive: true // New service groups are active by default
+      });
+
+      console.log('[AddNewServiceGroup] 📥 Add response:', {
+        status: addResponse.Status,
+        message: addResponse.Message,
+        id: addResponse.ID,
+        fullResponse: addResponse
+      });
+
+      if (addResponse.Status !== 201 && addResponse.Status !== 200) {
+        const errorMsg = addResponse.Message || `Failed to create service group (Status: ${addResponse.Status})`;
+        console.error('[AddNewServiceGroup] ❌ Failed to create service group:', errorMsg);
+        toast.error(errorMsg);
+        setLoading(false);
+        return;
+      }
+
+      if (!addResponse.ID) {
+        console.error('[AddNewServiceGroup] ❌ Service group created but no ID returned:', addResponse);
+        toast.error('Service group created but failed to get ID. Please refresh the page.');
+        setLoading(false);
+        return;
+      }
+
+      const groupId = addResponse.ID;
+      console.log('[AddNewServiceGroup] ✅ Service group created with ID:', groupId);
+
+      // Then, link services to the group
+      if (values.ServiceIds.length > 0) {
+        console.log('[AddNewServiceGroup] 🔗 Linking services to group...', {
+          groupId,
+          serviceIds: values.ServiceIds
+        });
+
+        const linkResponse = await linkServicesToGroup({
+          groupId: groupId,
+          serviceIds: values.ServiceIds
+        });
+
+        console.log('[AddNewServiceGroup] 📥 Link response:', {
+          status: linkResponse.Status,
+          message: linkResponse.Message
+        });
+
+        if (linkResponse.Status !== 201 && linkResponse.Status !== 200) {
+          console.warn('[AddNewServiceGroup] ⚠️ Failed to link services:', linkResponse.Message);
+          toast.warning('Service group created but failed to link services: ' + (linkResponse.Message || 'Unknown error'));
+        } else {
+          console.log('[AddNewServiceGroup] ✅ Services linked successfully');
+        }
+      }
+
+      toast.success('Service group created successfully');
+      // Redirect to service groups page with refresh parameter to ensure data reloads
+      router.push(`/services/groups?refresh=${Date.now()}`);
+    } catch (error: any) {
+      console.error('[AddNewServiceGroup] ❌ Unexpected error:', {
+        error,
+        message: error?.message,
+        stack: error?.stack,
+        response: error?.response
+      });
+      toast.error(error?.message || 'Failed to create service group. Please check the console for details.');
+      setLoading(false);
+    }
   }
   
   return (

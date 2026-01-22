@@ -1,6 +1,6 @@
 'use client';
 
-import { CompanyService } from "@/lib/types/service.types";
+import { ServiceGroup } from "@/lib/types/serviceGroup.types";
 import { MoreVertical } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,13 +10,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 interface ServiceGroupItemProps {
-    service: CompanyService;
+    group: ServiceGroup;
     index: number;
     dataLength: number;
-    handleDeleteItem: (serviceId: number) => void
+    handleDeleteItem: (groupId: number) => void
 }
 
-export default function ServiceGroupItem({ service, index, dataLength, handleDeleteItem }: ServiceGroupItemProps) {
+export default function ServiceGroupItem({ group, index, dataLength, handleDeleteItem }: ServiceGroupItemProps) {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false)
     const router = useRouter()
 
@@ -30,22 +30,25 @@ export default function ServiceGroupItem({ service, index, dataLength, handleDel
         ) {
             return
         }
-        router.push(`/services/${service.Id}/edit`)
+        router.push(`/services/groups/${group.Id}/edit`)
     }
+
+    // Get service names for display
+    const serviceNames = group.GroupedServices?.map(s => s.ServiceName).join(', ') || 'No services';
 
     return (
         <tr
-            key={service.Id}
+            key={group.Id}
             onClick={handleRowClick}
             className={`border-b border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer ${
                 index === dataLength - 1 ? 'border-b-0' : ''
             }`}
         >
             <td className="py-4 px-6 text-sm font-medium text-gray-900">
-                {service.ServiceName}
+                {group.Name}
             </td>
             <td className="py-4 px-6 h-19">
-                Follow Up Visit,  Initial Lactation consultation
+                {serviceNames}
             </td>
             <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
                 <DropdownMenu modal={false}>
@@ -60,7 +63,7 @@ export default function ServiceGroupItem({ service, index, dataLength, handleDel
                     <DropdownMenuContent className="w-40" align="end">
                     <DropdownMenuGroup>
                         <DropdownMenuItem>
-                            <Link className='w-full' href={`/services/groups/${service.Id}/edit`}>
+                            <Link className='w-full' href={`/services/groups/${group.Id}/edit`}>
                                 Edit
                             </Link>
                         </DropdownMenuItem>
@@ -73,9 +76,9 @@ export default function ServiceGroupItem({ service, index, dataLength, handleDel
                 <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
                     <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
-                        <DialogTitle>Delete Service</DialogTitle>
+                        <DialogTitle>Delete Service Group</DialogTitle>
                         <DialogDescription>
-                            Are you sure you want to delete this service?
+                            Are you sure you want to delete this service group?
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>
@@ -84,7 +87,7 @@ export default function ServiceGroupItem({ service, index, dataLength, handleDel
                         </DialogClose>
                         <Button variant="destructive" className="cursor-pointer" onClick={() => {
                             setShowDeleteDialog(false);
-                            handleDeleteItem(service.Id)
+                            handleDeleteItem(group.Id)
                         }}>Yes</Button>
                     </DialogFooter>
                     </DialogContent>

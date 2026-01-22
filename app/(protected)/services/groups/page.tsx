@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import CustomPagination from '@/components/shared/CustomPagination';
 import { ButtonGroup } from '@/components/ui/button-group';
 import { Button } from '@/components/ui/button';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ServiceGroupSkeleton from '@/components/skeleton/ServiceGroupSkeleton';
 import ServiceGroupItem from '@/components/shared/ServiceGroupItem';
 import { ServiceGroup } from '@/lib/types/serviceGroup.types';
@@ -34,6 +34,7 @@ export default function ServiceGroupsPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   async function load(user: User) {
     setLoading(true);
@@ -60,6 +61,20 @@ export default function ServiceGroupsPage() {
       load(user);
     }
   }, [user, currentPage]);
+
+  // Reload data when refresh parameter is present (e.g., when navigating from add page)
+  useEffect(() => {
+    const refresh = searchParams.get('refresh');
+    if (refresh && user) {
+      // Small delay to ensure the API has processed the new group
+      const timer = setTimeout(() => {
+        load(user);
+        // Clean up the URL by removing the refresh parameter
+        router.replace('/services/groups');
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [searchParams, user, router]);
 
   useEffect(() => {
     setFilteredData(data);

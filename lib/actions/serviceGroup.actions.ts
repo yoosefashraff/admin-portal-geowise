@@ -12,31 +12,102 @@ import {
 export async function addServiceGroup(
   data: AddServiceGroupRequest
 ): Promise<ServiceGroupResponse> {
-  try {
-    console.log('[addServiceGroup] 🔄 Adding service group...', { name: data.Name });
-    
-    const response: ServiceGroupResponse = await serverAPI.post('/ServiceGroup/Add', data);
-    
-    console.log('[addServiceGroup] 📥 Response received:', {
-      status: response.Status,
-      message: response.Message,
-      id: response.ID,
-    });
-    
-    return response;
-  } catch (err: any) {
-    console.error('[addServiceGroup] ❌ Error:', {
-      message: err.message,
-      status: err.response?.status,
-    });
-    
-    const errorMessage = err.response?.data?.Message || err.response?.statusText || err.message || 'Failed to add service group';
-    
-    return {
-      Status: err.response?.status || 500,
-      Message: errorMessage,
-    };
+  // Try multiple endpoint patterns based on codebase conventions
+  // According to API docs, the correct endpoint is POST /ServiceGroup/Add with { Name, IsActive }
+  const possibleEndpoints = [
+    // Correct format according to API documentation
+    { method: 'POST' as const, url: '/ServiceGroup/Add', payload: { Name: data.Name, IsActive: data.IsActive } },
+    // Fallback patterns (in case of casing issues)
+    { method: 'POST' as const, url: '/servicegroup/Add', payload: { Name: data.Name, IsActive: data.IsActive } },
+    { method: 'POST' as const, url: '/ServiceGroup/add', payload: { Name: data.Name, IsActive: data.IsActive } },
+  ];
+  
+  let lastError: any = null;
+  let attemptedEndpoints: string[] = [];
+  
+  for (const endpoint of possibleEndpoints) {
+    try {
+      const endpointStr = `${endpoint.method} ${endpoint.url} with payload: ${JSON.stringify(endpoint.payload)}`;
+      attemptedEndpoints.push(endpointStr);
+      
+      console.log('[addServiceGroup] 🔍 Trying endpoint:', {
+        method: endpoint.method,
+        url: endpoint.url,
+        payload: endpoint.payload,
+        attempt: attemptedEndpoints.length,
+        totalAttempts: possibleEndpoints.length
+      });
+      
+      const response: ServiceGroupResponse = await serverAPI.post(endpoint.url, endpoint.payload);
+      
+      // If we get a successful response (200/201), use it
+      if (response.Status === 200 || response.Status === 201) {
+        console.log('[addServiceGroup] ✅ Success with endpoint:', {
+          method: endpoint.method,
+          url: endpoint.url,
+          Status: response.Status,
+          Message: response.Message,
+          ID: response.ID
+        });
+        return response;
+      }
+      
+      // If it's a 404, try next endpoint
+      if (response.Status === 404) {
+        console.log('[addServiceGroup] ⚠️ Endpoint not found, trying next:', endpointStr);
+        lastError = { response: { status: 404 }, message: `Endpoint returned 404` };
+        continue;
+      }
+      
+      // Other status codes - return the response (might be validation error, etc.)
+      console.log('[addServiceGroup] ⚠️ Endpoint returned non-success status:', {
+        url: endpoint.url,
+        Status: response.Status,
+        Message: response.Message
+      });
+      return response;
+      
+    } catch (err: any) {
+      lastError = err;
+      
+      // If it's a 404, try the next endpoint
+      if (err.response?.status === 404) {
+        console.log('[addServiceGroup] ⚠️ Endpoint returned 404, trying next');
+        continue;
+      }
+      
+      // For non-404 errors, log and continue to try other endpoints
+      console.error('[addServiceGroup] ⚠️ Error on endpoint (will try next):', {
+        method: endpoint.method,
+        url: endpoint.url,
+        status: err.response?.status,
+        message: err.message,
+        responseData: err.response?.data
+      });
+      
+      // If it's not a 404, it might be a validation error - try next endpoint anyway
+      // but keep track of the error in case all endpoints fail
+      continue;
+    }
   }
+  
+  // All endpoints failed
+  console.error('[addServiceGroup] ❌ All endpoints failed:', {
+    name: data.Name,
+    attemptedEndpoints,
+    totalAttempts: attemptedEndpoints.length,
+    lastError: lastError?.message || lastError?.response?.data
+  });
+  
+  const errorMessage = lastError?.response?.data?.Message 
+    || lastError?.response?.statusText 
+    || lastError?.message 
+    || `Failed to add service group. Attempted endpoints: ${attemptedEndpoints.join(', ')}`;
+  
+  return {
+    Status: lastError?.response?.status || 500,
+    Message: errorMessage,
+  };
 }
 
 export async function getServiceGroupList(): Promise<ServiceGroupResponse> {
@@ -101,9 +172,18 @@ export async function updateServiceGroup(
   data: UpdateServiceGroupRequest
 ): Promise<ServiceGroupResponse> {
   try {
-    console.log('[updateServiceGroup] 🔄 Updating service group...', { id: data.Id, name: data.Name });
+    console.log('[updateServiceGroup] 🔄 Updating service group...', { 
+      id: data.Id, 
+      name: data.Name,
+      isActive: data.IsActive 
+    });
     
-    const response: ServiceGroupResponse = await serverAPI.post('/ServiceGroup/Update', data);
+    // According to API docs, payload should be { Id, Name, IsActive }
+    const response: ServiceGroupResponse = await serverAPI.post('/ServiceGroup/Update', {
+      Id: data.Id,
+      Name: data.Name,
+      IsActive: data.IsActive
+    });
     
     console.log('[updateServiceGroup] 📥 Response received:', {
       status: response.Status,
@@ -127,27 +207,15 @@ export async function updateServiceGroup(
 }
 
 export async function deleteServiceGroup(id: number): Promise<ServiceGroupResponse> {
-  // Try multiple endpoint patterns based on codebase conventions
-  // Some endpoints use DELETE, others use POST for delete operations
+  // According to API docs: POST https://gw5cndev.geowise.ai/ServiceGroup/Delete?id=2
+  // Uses query parameter, not body data
   const possibleEndpoints = [
-    // POST method patterns (most common in this codebase for delete operations)
+    // Correct format according to API documentation
+    { method: 'POST' as const, url: `/ServiceGroup/Delete?id=${id}` },
+    // Fallback patterns
     { method: 'POST' as const, url: `/ServiceGroup/Delete`, data: { id: id } },
-    { method: 'POST' as const, url: `/ServiceGroup/Delete`, data: { groupId: id } },
-    { method: 'POST' as const, url: `/ServiceGroup/Delete`, data: { serviceGroupId: id } },
-    { method: 'POST' as const, url: `/servicegroup/Delete`, data: { id: id } },
-    { method: 'POST' as const, url: `/servicegroup/delete`, data: { id: id } },
-    { method: 'POST' as const, url: `/ServiceGroup/delete`, data: { id: id } },
-    { method: 'POST' as const, url: `/company/DeleteServiceGroup`, data: { id: id } },
-    { method: 'POST' as const, url: `/company/deleteservicegroup`, data: { id: id } },
-    { method: 'POST' as const, url: `/Company/DeleteServiceGroup`, data: { id: id } },
-    // DELETE method patterns
+    { method: 'POST' as const, url: `/servicegroup/Delete?id=${id}` },
     { method: 'DELETE' as const, url: `/ServiceGroup/Delete?id=${id}` },
-    { method: 'DELETE' as const, url: `/ServiceGroup/Delete?groupId=${id}` },
-    { method: 'DELETE' as const, url: `/ServiceGroup/Delete?serviceGroupId=${id}` },
-    { method: 'DELETE' as const, url: `/servicegroup/Delete?id=${id}` },
-    { method: 'DELETE' as const, url: `/servicegroup/delete?id=${id}` },
-    { method: 'DELETE' as const, url: `/ServiceGroup/delete?id=${id}` },
-    { method: 'DELETE' as const, url: `/company/DeleteServiceGroup?id=${id}` },
   ];
   
   let lastError: any = null;
@@ -172,7 +240,11 @@ export async function deleteServiceGroup(id: number): Promise<ServiceGroupRespon
       
       if (endpoint.method === 'DELETE') {
         response = await serverAPI.delete(endpoint.url);
+      } else if (endpoint.url.includes('?')) {
+        // Query parameter in URL (correct format per API docs)
+        response = await serverAPI.post(endpoint.url);
       } else {
+        // Body data (fallback)
         response = await serverAPI.post(endpoint.url, endpoint.data);
       }
       

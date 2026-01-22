@@ -44,14 +44,14 @@ export function DashboardSidebar() {
       title: "Core",
       items: [
         {
-          label: "Dashboard",
-          icon: LayoutGrid,
-          href: "/dashboard",
-        },
-        {
           label: "Calendar",
           icon: CalendarDays,
           href: "/calendar",
+        },
+        {
+          label: "Dashboard",
+          icon: LayoutGrid,
+          href: "/dashboard",
         },
       ],
     },

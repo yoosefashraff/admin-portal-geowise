@@ -365,21 +365,6 @@ export default function DashboardPage() {
     );
   };
 
-  // Auto-rotate tabs in a loop
-  useEffect(() => {
-    if (isLoading) return;
-
-    const tabs = ['requests', 'operations', 'services'];
-    let currentIndex = tabs.indexOf(activeTab);
-    
-    const interval = setInterval(() => {
-      currentIndex = (currentIndex + 1) % tabs.length;
-      setActiveTab(tabs[currentIndex]);
-    }, 5000); // Switch every 5 seconds
-
-    return () => clearInterval(interval);
-  }, [activeTab, isLoading]);
-
   if (isLoading) {
     return <DashboardSkeleton />;
   }
