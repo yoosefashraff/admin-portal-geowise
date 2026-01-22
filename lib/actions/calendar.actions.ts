@@ -291,9 +291,8 @@ export async function calendarBooking(data: BookingRequestPayload) : Promise<API
         Status: response.Status,
         Message: response.Message,
         hasObject: !!response.Object,
-        hasList: !!response.List,
         objectType: response.Object ? typeof response.Object : 'none',
-        listLength: response.List ? (Array.isArray(response.List) ? response.List.length : 'not array') : 'none'
+        objectLength: response.Object ? (Array.isArray(response.Object) ? response.Object.length : 'not array') : 'none'
       },
       note: 'This is the response received from the Web API backend (ASP.NET)'
     });

@@ -288,14 +288,15 @@ export default function EditProviderPage() {
 
             <Separator className="bg-gray-200 h-0.25" />
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Availability section - TODO: Implement availability management for linked users */}
+            {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex">
                 <label className="font-medium">Availability</label>
               </div>
               <div className="flex flex-col gap-4">
-                <AvailabilityCard />
+                <AvailabilityCard dayOfWeek="Monday" />
               </div>
-            </div>
+            </div> */}
           </div>
         </CardContent>
       </Card>
